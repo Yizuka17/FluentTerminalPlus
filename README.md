@@ -1,3 +1,9 @@
+> **⚠️ Project Status: Unmaintained**
+>
+> This project is no longer being maintained.
+>
+> **Recommendation:** Windows Terminal is now a robust, feature-rich terminal application that contains everything I originally set out to achieve with Fluent Terminal, and more. I highly recommend using [Windows Terminal](https://github.com/microsoft/terminal) as an alternative. Thank you to everyone who supported and contributed to this project!
+
 <p align="center">
   <img alt="fluent terminal logo" src="./Icons/Icon_no_margin.png" width="100px" />
   <h1 align="center">Fluent Terminal</h1>
