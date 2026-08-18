@@ -94,13 +94,14 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
             _process = ProcessFactory.Start(command, directory, environment, PseudoConsole.PseudoConsoleThreadAttribute, _pseudoConsole.Handle);
 
-            // copy all pseudoconsole output to a FileStream and expose it to the rest of the app
+            // Expose both sides of the ConPTY transport before reporting readiness. In the upstream
+            // ordering OutputReady fired before the input writer existed, so an immediate first keypress
+            // could be silently dropped.
             ConsoleOutStream = new FileStream(_outputPipe.ReadSide, FileAccess.Read);
-            OutputReady?.Invoke(this, EventArgs.Empty);
-
-            // Store input pipe handle, and a writer for later reuse
             _consoleInputPipeWriteHandle = _inputPipe.WriteSide;
             _consoleInputWriter = new FileStream(_consoleInputPipeWriteHandle, FileAccess.Write);
+
+            OutputReady?.Invoke(this, EventArgs.Empty);
 
             WaitForExit(_process).WaitOne(Timeout.Infinite);
             ExitCode = (int)_process.GetExitCode();
