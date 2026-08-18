@@ -8,11 +8,11 @@
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   IgnorableNamespaces="uap rescap desktop">
 
-  <Identity Name="53621FSApps.FluentTerminal" Publisher="CN=BDC72197-B634-438A-B863-16DCB7D90C85" Version="0.7.7.0" />
+  <Identity Name="Yizuka17.FluentTerminalPlus" Publisher="CN=BDC72197-B634-438A-B863-16DCB7D90C85" Version="0.7.7.0" />
 
   <Properties>
-    <DisplayName>Fluent Terminal</DisplayName>
-    <PublisherDisplayName>FS Apps</PublisherDisplayName>
+    <DisplayName>FluentTerminalPlus</DisplayName>
+    <PublisherDisplayName>Yizuka17</PublisherDisplayName>
     <Logo>Images\AppIcons\StoreLogo.png</Logo>
   </Properties>
 
@@ -27,8 +27,8 @@
 
   <Applications>
     <Application Id="App" EntryPoint="FluentTerminal.App.App" Executable="FluentTerminal.App\FluentTerminal.App.exe">
-      <uap:VisualElements DisplayName="Fluent Terminal" Square150x150Logo="Images\AppIcons\Square150x150Logo.png" Square44x44Logo="Images\AppIcons\Square44x44Logo.png" Description="Fluent Terminal" BackgroundColor="transparent">
-        <uap:DefaultTile Wide310x150Logo="Images\AppIcons\Wide310x150Logo.png" ShortName="Fluent Terminal" Square310x310Logo="Images\AppIcons\LargeTile.png" Square71x71Logo="Images\AppIcons\SmallTile.png">
+      <uap:VisualElements DisplayName="FluentTerminalPlus" Square150x150Logo="Images\AppIcons\Square150x150Logo.png" Square44x44Logo="Images\AppIcons\Square44x44Logo.png" Description="FluentTerminalPlus" BackgroundColor="transparent">
+        <uap:DefaultTile Wide310x150Logo="Images\AppIcons\Wide310x150Logo.png" ShortName="FluentTerminalPlus" Square310x310Logo="Images\AppIcons\LargeTile.png" Square71x71Logo="Images\AppIcons\SmallTile.png">
           <uap:ShowNameOnTiles>
             <uap:ShowOn Tile="square150x150Logo" />
             <uap:ShowOn Tile="wide310x150Logo" />
@@ -45,29 +45,14 @@
         </desktop:Extension>
         <uap5:Extension Category="windows.appExecutionAlias" Executable="FluentTerminal.App.exe" EntryPoint="FluentTerminal.App.App">
           <uap5:AppExecutionAlias>
-            <uap5:ExecutionAlias Alias="flute.exe" />
+            <uap5:ExecutionAlias Alias="fluentterminalplus.exe" />
           </uap5:AppExecutionAlias>
         </uap5:Extension>
         <desktop:Extension Category="windows.startupTask" Executable="FluentTerminal.SystemTray\FluentTerminal.SystemTray.exe" EntryPoint="Windows.FullTrustApplication">
-          <desktop:StartupTask TaskId="FluentTerminalStartupTask" Enabled="false" DisplayName="Fluent Terminal" />
+          <desktop:StartupTask TaskId="FluentTerminalPlusStartupTask" Enabled="false" DisplayName="FluentTerminalPlus" />
         </desktop:Extension>
         <uap:Extension Category="windows.appService">
           <uap:AppService Name="FluentTerminalAppService" />
-        </uap:Extension>
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="ssh">
-            <uap:DisplayName>SSH Session</uap:DisplayName>
-          </uap:Protocol>
-        </uap:Extension>
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="mosh">
-            <uap:DisplayName>Mobile Shell Session</uap:DisplayName>
-          </uap:Protocol>
-        </uap:Extension>
-        <uap:Extension Category="windows.protocol">
-          <uap:Protocol Name="ftcmd">
-            <uap:DisplayName>Fluent-specific SSH</uap:DisplayName>
-          </uap:Protocol>
         </uap:Extension>
       </Extensions>
     </Application>
