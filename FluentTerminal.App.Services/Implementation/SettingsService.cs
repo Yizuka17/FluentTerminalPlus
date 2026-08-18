@@ -410,7 +410,7 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void SaveCurrentThemeId(Guid id)
         {
-            _localSettings.SetValue(CurrentThemeKey, id);
+            _roamingSettings.SetValue(CurrentThemeKey, id);
 
             WeakReferenceMessenger.Default.Send(new CurrentThemeChangedMessage(id));
         }
