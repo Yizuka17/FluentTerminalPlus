@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Linq;
@@ -31,6 +31,7 @@ namespace FluentTerminal.Models
             TerminalThemeId = other.TerminalThemeId;
             UseConPty = other.UseConPty;
             UseBuffer = other.UseBuffer;
+            RunAsAdministrator = other.RunAsAdministrator;
             KeyBindings = other.KeyBindings.Select(x => new KeyBinding(x)).ToList();
         }
 
@@ -44,6 +45,7 @@ namespace FluentTerminal.Models
         public Dictionary<string, string> EnvironmentVariables { get; set; } = new Dictionary<string, string>();
         public bool UseConPty { get; set; }
         public bool UseBuffer { get; set; } = true;
+        public bool RunAsAdministrator { get; set; }
 
         public int MigrationVersion { get; set; } = CurrentMigrationVersion;
 
@@ -78,6 +80,7 @@ namespace FluentTerminal.Models
                    && other.TerminalThemeId.Equals(TerminalThemeId)
                    && other.UseConPty == UseConPty
                    && other.UseBuffer == UseBuffer
+                   && other.RunAsAdministrator == RunAsAdministrator
                    && other.KeyBindings.SequenceEqual(KeyBindings);
         }
 
