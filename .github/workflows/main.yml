@@ -30,10 +30,12 @@ jobs:
         shell: pwsh
         working-directory: ./FluentTerminal.Client
         run: |
-          yarn 2>&1 | Tee-Object -FilePath ..\client-build.log
+          # This project commits package-lock.json but no yarn.lock. Using yarn would resolve
+          # today's transitive dependencies against an old TypeScript compiler and is not reproducible.
+          npm ci 2>&1 | Tee-Object -FilePath ..\client-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-          yarn build 2>&1 | Tee-Object -FilePath ..\client-build.log -Append
+          npm run build 2>&1 | Tee-Object -FilePath ..\client-build.log -Append
           exit $LASTEXITCODE
 
       - name: Setup MSBuild.exe
