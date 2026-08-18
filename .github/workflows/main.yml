@@ -59,6 +59,20 @@ jobs:
           }
 
           Write-Host "Building against Windows SDK $sdkVersion"
+
+          # The UWP project also hard-codes the Windows Desktop Extension SDK at 19041. MSBuild's
+          # TargetPlatformVersion property does not retarget SDKReference items, so patch only this
+          # generated build workspace copy to the SDK that actually exists on the runner.
+          $appProject = 'FluentTerminal.App\FluentTerminal.App.csproj'
+          $projectText = Get-Content $appProject -Raw
+          $oldDesktopSdk = 'WindowsDesktop, Version=10.0.19041.0'
+          $newDesktopSdk = "WindowsDesktop, Version=$sdkVersion"
+          if (-not $projectText.Contains($oldDesktopSdk)) {
+            throw "Expected WindowsDesktop 19041 SDKReference was not found in $appProject"
+          }
+          $projectText = $projectText.Replace($oldDesktopSdk, $newDesktopSdk)
+          [System.IO.File]::WriteAllText((Resolve-Path $appProject), $projectText, [System.Text.UTF8Encoding]::new($true))
+
           # This legacy solution builds SystemTray both directly and through the packaging project.
           # Parallel MSBuild nodes race on the same obj/resource files, so keep the graph serialized.
           msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 "-p:TargetPlatformVersion=$sdkVersion" -m:1 -restore 2>&1 | Tee-Object -FilePath msbuild.log
