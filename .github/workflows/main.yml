@@ -1,23 +1,26 @@
 name: CI
 
-on: [push]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
-
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@master
-    
-    - name: Build client
-      working-directory: ./FluentTerminal.Client
-      run: |
-        yarn
-        yarn build
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup MSBuild.exe
-      uses: microsoft/setup-msbuild@v1.0.2
-    
-    - name: MSBuild
-      run: msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore
+      - name: Build client
+        working-directory: ./FluentTerminal.Client
+        run: |
+          yarn
+          yarn build
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build solution
+        run: msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore
