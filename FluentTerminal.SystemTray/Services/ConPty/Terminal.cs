@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32.SafeHandles;
+using Microsoft.Win32.SafeHandles;
 using System;
 using System.ComponentModel;
 using System.IO;
@@ -80,7 +80,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
         }
 
         /// <summary>
-        /// Start the psuedoconsole and run the process as shown in 
+        /// Start the psuedoconsole and run the process as shown in
         /// https://docs.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session#creating-the-pseudoconsole
         /// </summary>
         /// <param name="command">the command to run, e.g. cmd.exe</param>
@@ -96,19 +96,19 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
             // copy all pseudoconsole output to a FileStream and expose it to the rest of the app
             ConsoleOutStream = new FileStream(_outputPipe.ReadSide, FileAccess.Read);
-            OutputReady.Invoke(this, EventArgs.Empty);
+            OutputReady?.Invoke(this, EventArgs.Empty);
 
             // Store input pipe handle, and a writer for later reuse
             _consoleInputPipeWriteHandle = _inputPipe.WriteSide;
             _consoleInputWriter = new FileStream(_consoleInputPipeWriteHandle, FileAccess.Write);
 
             WaitForExit(_process).WaitOne(Timeout.Infinite);
-            this.ExitCode = (int)_process.GetExitCode();
+            ExitCode = (int)_process.GetExitCode();
 
             Exited?.Invoke(this, EventArgs.Empty);
         }
 
-        public  void Resize(int width, int height)
+        public void Resize(int width, int height)
         {
             _pseudoConsole?.Resize(width, height);
         }
@@ -161,10 +161,10 @@ namespace FluentTerminal.SystemTray.Services.ConPty
         public void Dispose()
         {
             Dispose(true);
-            GC.SuppressFinalize(true);
+            GC.SuppressFinalize(this);
         }
 
-        private bool alreadyDisposed = false;
+        private bool alreadyDisposed;
 
         public void Dispose(bool disposeManaged)
         {
@@ -175,7 +175,9 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
             if (disposeManaged)
             {
-                ConsoleOutStream.Dispose();
+                // A process can fail before the output stream is created. Cleanup must not mask the
+                // original startup error with a NullReferenceException.
+                ConsoleOutStream?.Dispose();
                 // Dispose pseudo console before _consoleInputWriter to avoid
                 // hanging on call of ClosePseudoConsole
                 _pseudoConsole?.Dispose();
