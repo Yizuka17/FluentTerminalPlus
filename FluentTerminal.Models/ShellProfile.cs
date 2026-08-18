@@ -32,6 +32,9 @@ namespace FluentTerminal.Models
             UseConPty = other.UseConPty;
             UseBuffer = other.UseBuffer;
             RunAsAdministrator = other.RunAsAdministrator;
+            EnvironmentVariables = other.EnvironmentVariables == null
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string>(other.EnvironmentVariables);
             KeyBindings = other.KeyBindings.Select(x => new KeyBinding(x)).ToList();
         }
 
