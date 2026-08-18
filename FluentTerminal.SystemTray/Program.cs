@@ -1,8 +1,9 @@
-﻿using Autofac;
+using Autofac;
 using FluentTerminal.App.Services;
 using FluentTerminal.App.Services.Adapters;
 using FluentTerminal.App.Services.Implementation;
 using FluentTerminal.SystemTray.Services;
+using FluentTerminal.SystemTray.Services.ConPty;
 using GlobalHotKey;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -24,6 +25,13 @@ namespace FluentTerminal.SystemTray
         [STAThread]
         public static void Main(string[] args)
         {
+            if (args != null && args.Length >= 2 &&
+                string.Equals(args[0], "--elevated-session", StringComparison.OrdinalIgnoreCase))
+            {
+                ElevatedConPtyHost.Run(args[1]);
+                return;
+            }
+
             if (!Mutex.TryOpenExisting(MutexName, out _))
             {
                 using (new Mutex(false, MutexName))
@@ -73,7 +81,7 @@ namespace FluentTerminal.SystemTray
 
                     var appCommunicationService = container.Resolve<AppCommunicationService>();
 
-                    if (args.Length > 0 && args[2] == "appLaunched")
+                    if (args != null && args.Length > 2 && args[2] == "appLaunched")
                     {
                         // ReSharper disable once AssignmentIsFullyDiscarded
                         _ = appCommunicationService.StartAppServiceConnectionAsync();
