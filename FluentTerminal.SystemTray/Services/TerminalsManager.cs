@@ -219,7 +219,38 @@ namespace FluentTerminal.SystemTray.Services
 
         public string GetDefaultEnvironmentVariableString(Dictionary<string, string> additionalVariables)
         {
-            var environmentVariables = Environment.GetEnvironmentVariables();
+            // Desktop Bridge/full-trust launches can occasionally inherit a truncated process PATH.
+            // Build a case-insensitive environment map and restore PATH from the persistent machine +
+            // user values before passing the block to ConPTY. This makes every tab independent of the
+            // launcher's transient PATH and removes the need for a PowerShell-profile workaround.
+            var environmentVariables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DictionaryEntry item in Environment.GetEnvironmentVariables())
+            {
+                if (item.Key != null)
+                {
+                    environmentVariables[item.Key.ToString()] = item.Value?.ToString() ?? string.Empty;
+                }
+            }
+
+            var machinePath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine);
+            var userPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User);
+
+            if (!string.IsNullOrWhiteSpace(machinePath) || !string.IsNullOrWhiteSpace(userPath))
+            {
+                if (string.IsNullOrWhiteSpace(machinePath))
+                {
+                    environmentVariables["Path"] = userPath;
+                }
+                else if (string.IsNullOrWhiteSpace(userPath))
+                {
+                    environmentVariables["Path"] = machinePath;
+                }
+                else
+                {
+                    environmentVariables["Path"] = machinePath.TrimEnd(';') + ";" + userPath.TrimStart(';');
+                }
+            }
+
             environmentVariables["TERM_PROGRAM"] = "FluentTerminalPlus";
             environmentVariables["TERM_PROGRAM_VERSION"] = $"{Package.Current.Id.Version.Major}.{Package.Current.Id.Version.Minor}.{Package.Current.Id.Version.Build}.{Package.Current.Id.Version.Revision}";
 
@@ -233,7 +264,7 @@ namespace FluentTerminal.SystemTray.Services
 
             var builder = new StringBuilder();
 
-            foreach (DictionaryEntry item in environmentVariables)
+            foreach (var item in environmentVariables)
             {
                 builder.Append(item.Key).Append("=").Append(item.Value).Append("\0");
             }
