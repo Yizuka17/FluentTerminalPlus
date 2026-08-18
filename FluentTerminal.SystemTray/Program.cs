@@ -20,7 +20,7 @@ namespace FluentTerminal.SystemTray
 {
     public static class Program
     {
-        private const string MutexName = "FluentTerminalMutex";
+        private const string MutexName = "FluentTerminalPlusMutex";
 
         [STAThread]
         public static void Main(string[] args)
@@ -87,10 +87,8 @@ namespace FluentTerminal.SystemTray
                         _ = appCommunicationService.StartAppServiceConnectionAsync();
                     }
 
-#if !STORE
-                    // ReSharper disable once AssignmentIsFullyDiscarded
-                    _ = Task.Factory.StartNew(() => container.Resolve<IUpdateService>().CheckForUpdateAsync());
-#endif
+                    // FluentTerminalPlus is a fork and must not query or offer upstream Fluent Terminal
+                    // releases. A dedicated update channel can be added later when Plus has releases.
                     var settingsService = container.Resolve<ISettingsService>();
 
                     // ReSharper disable once AssignmentIsFullyDiscarded
@@ -116,7 +114,7 @@ namespace FluentTerminal.SystemTray
         private static async Task ConfigureLoggingAsync()
         {
             var logDirectory = await ApplicationData.Current.LocalCacheFolder.CreateFolderAsync("Logs", CreationCollisionOption.OpenIfExists).AsTask().ConfigureAwait(false);
-            var logFile = Path.Combine(logDirectory.Path, "fluentterminal.systemtray.log");
+            var logFile = Path.Combine(logDirectory.Path, "fluentterminalplus.systemtray.log");
             var configFile = await logDirectory.CreateFileAsync("config.json", CreationCollisionOption.OpenIfExists).AsTask().ConfigureAwait(false);
             var configContent = await FileIO.ReadTextAsync(configFile).AsTask().ConfigureAwait(false);
             var config = JsonConvert.DeserializeObject<Logger.Configuration>(configContent) ?? new Logger.Configuration();
