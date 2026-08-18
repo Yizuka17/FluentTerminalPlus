@@ -14,6 +14,7 @@
     <PackageReference Include="AutoFixture" Version="4.17.0" />
     <PackageReference Include="FluentAssertions" Version="6.5.1" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.2" />
     <PackageReference Include="Moq" Version="4.17.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
     <PackageReference Include="xunit" Version="2.4.1" />
@@ -32,13 +33,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FluentTerminal.App.Services\FluentTerminal.App.Services.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Windows.Foundation.FoundationContract">
-      <HintPath>$(MSBuildProgramFiles32)\Windows Kits\10\References\10.0.19041.0\Windows.Foundation.FoundationContract\4.0.0.0\Windows.Foundation.FoundationContract.winmd</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
 
 </Project>
