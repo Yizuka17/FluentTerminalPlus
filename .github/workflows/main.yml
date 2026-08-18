@@ -7,6 +7,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,25 +26,98 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build client
+        id: client
+        shell: pwsh
         working-directory: ./FluentTerminal.Client
         run: |
-          yarn
-          yarn build
+          yarn 2>&1 | Tee-Object -FilePath ..\client-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          yarn build 2>&1 | Tee-Object -FilePath ..\client-build.log -Append
+          exit $LASTEXITCODE
 
       - name: Setup MSBuild.exe
         uses: microsoft/setup-msbuild@v2
 
       - name: Build solution
-        run: msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore
+        id: msbuild
+        shell: pwsh
+        run: |
+          msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore 2>&1 | Tee-Object -FilePath msbuild.log
+          exit $LASTEXITCODE
 
-      - name: Upload x64 Debug artifacts
+      - name: Upload x64 Debug artifacts and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: FluentTerminalPlus-x64-Debug
           if-no-files-found: warn
           retention-days: 14
           path: |
+            client-build.log
+            msbuild.log
             FluentTerminal.Package/AppPackages/**
             FluentTerminal.Package/bin/x64/Debug/**
             FluentTerminal.App/bin/x64/Debug/**
             FluentTerminal.SystemTray/bin/x64/Debug/**
+
+      - name: Report CI result to PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          CLIENT_OUTCOME: ${{ steps.client.outcome }}
+          MSBUILD_OUTCOME: ${{ steps.msbuild.outcome }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- fluentterminalplus-ci -->';
+            const client = process.env.CLIENT_OUTCOME || 'not-run';
+            const msbuild = process.env.MSBUILD_OUTCOME || 'not-run';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            let logSection = '';
+            const failedLog = msbuild === 'failure'
+              ? 'msbuild.log'
+              : (client === 'failure' ? 'client-build.log' : null);
+
+            if (failedLog && fs.existsSync(failedLog)) {
+              let text = fs.readFileSync(failedLog, 'utf8')
+                .replace(/\x1b\[[0-9;]*m/g, '')
+                .replace(/\r/g, '');
+              const lines = text.split('\n');
+              text = lines.slice(-90).join('\n');
+              if (text.length > 9000) {
+                text = text.slice(-9000);
+              }
+              logSection = `\n\n<details><summary>Failure log tail (${failedLog})</summary>\n\n\`\`\`text\n${text}\n\`\`\`\n</details>`;
+            }
+
+            const icon = client === 'success' && msbuild === 'success' ? '✅' : '❌';
+            const body = `${marker}\n### ${icon} FluentTerminalPlus CI\n- Client build: **${client}**\n- x64 Debug solution build: **${msbuild}**\n- Commit: \`${context.sha.slice(0, 12)}\`\n- [Open workflow run](${runUrl})${logSection}`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+
+            const existing = comments.find(comment =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
