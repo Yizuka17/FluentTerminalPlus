@@ -45,7 +45,21 @@ jobs:
         id: msbuild
         shell: pwsh
         run: |
-          msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore 2>&1 | Tee-Object -FilePath msbuild.log
+          # GitHub's current windows-latest image no longer carries the old 19041 SDK that
+          # Fluent Terminal originally targeted. Compile against the newest installed UAP SDK
+          # while keeping each project's TargetPlatformMinVersion unchanged for Windows 10.
+          $uapSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Platforms\UAP'
+          $sdkVersion = Get-ChildItem -Path $uapSdkRoot -Directory -ErrorAction Stop |
+            Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1 -ExpandProperty Name
+
+          if ([string]::IsNullOrWhiteSpace($sdkVersion)) {
+            throw "No installed UAP Windows SDK was found under $uapSdkRoot"
+          }
+
+          Write-Host "Building against Windows SDK $sdkVersion"
+          msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 "-p:TargetPlatformVersion=$sdkVersion" -m -restore 2>&1 | Tee-Object -FilePath msbuild.log
           exit $LASTEXITCODE
 
       - name: Upload x64 Debug artifacts and logs
