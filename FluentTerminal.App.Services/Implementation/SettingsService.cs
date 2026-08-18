@@ -1,4 +1,4 @@
-﻿using FluentTerminal.Models;
+using FluentTerminal.Models;
 using FluentTerminal.Models.Enums;
 using Newtonsoft.Json;
 using System;
@@ -16,6 +16,12 @@ namespace FluentTerminal.App.Services.Implementation
         public const string CurrentThemeKey = "CurrentTheme";
         public const string DefaultShellProfileKey = "DefaultShellProfile";
         public const string DefaultSshProfileKey = "DefaultSshProfile";
+
+        // This profile is intentionally virtual instead of being persisted into the user's settings.
+        // Existing Fluent Terminal installations therefore gain an administrator entry without a
+        // settings migration, and removing/resetting settings cannot accidentally strip elevation.
+        private static readonly Guid AdministratorPowerShellProfileId =
+            Guid.Parse("7c6fa63f-a1df-48da-a2b8-14b41c271209");
 
         private readonly IDefaultValueProvider _defaultValueProvider;
         private readonly IApplicationDataContainer _keyBindings;
@@ -36,7 +42,6 @@ namespace FluentTerminal.App.Services.Implementation
             _shellProfiles = containers.ShellProfiles;
             _sshProfiles = containers.SshProfiles;
 
-
             foreach (var theme in _defaultValueProvider.GetPreInstalledThemes())
             {
                 if (GetTheme(theme.Id) == null)
@@ -52,6 +57,29 @@ namespace FluentTerminal.App.Services.Implementation
                     _shellProfiles.WriteValueAsJson(shellProfile.Id.ToString(), shellProfile);
                 }
             }
+        }
+
+        private static ShellProfile CreateAdministratorPowerShellProfile()
+        {
+            return new ShellProfile
+            {
+                Id = AdministratorPowerShellProfileId,
+                Name = "PowerShell 7 (Admin)",
+                MigrationVersion = ShellProfile.CurrentMigrationVersion,
+                Arguments = string.Empty,
+                // Reuse Fluent Terminal's legacy PowerShell location here. The ConPTY launch layer
+                // upgrades this location to PowerShell 7 when pwsh.exe is installed.
+                Location = @"C:\windows\system32\WindowsPowerShell\v1.0\powershell.exe",
+                PreInstalled = true,
+                WorkingDirectory = string.Empty,
+                UseConPty = true,
+                UseBuffer = false,
+                RunAsAdministrator = true,
+                EnvironmentVariables = new Dictionary<string, string>
+                {
+                    ["TERM"] = "xterm-256color"
+                }
+            };
         }
 
         public string ExportSettings()
@@ -111,13 +139,11 @@ namespace FluentTerminal.App.Services.Implementation
 
             SaveApplicationSettings(config.App);
 
-            // Since we set each command sepaartely, we don't need all existing settings
             foreach (var pair in config.KeyBindings)
             {
                 SaveKeyBindings(pair.Key, pair.Value);
             }
 
-            // Can't create/modify pre-installed themes
             foreach (var theme in config.Themes.Where(x => !x.PreInstalled))
             {
                 var existingTheme = GetTheme(theme.Id);
@@ -130,12 +156,17 @@ namespace FluentTerminal.App.Services.Implementation
 
             foreach (var profile in config.Profiles)
             {
+                // The built-in administrator profile is generated locally and is not imported.
+                if (profile.Id == AdministratorPowerShellProfileId)
+                {
+                    continue;
+                }
+
                 var existingProfile = GetShellProfile(profile.Id);
                 var isNew = existingProfile == default;
 
                 if (!isNew && existingProfile.PreInstalled)
                 {
-                    // those cannot be edited
                     profile.Name = existingProfile.Name;
                     profile.Location = existingProfile.Location;
 
@@ -168,6 +199,11 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void DeleteShellProfile(Guid id)
         {
+            if (id == AdministratorPowerShellProfileId)
+            {
+                return;
+            }
+
             _shellProfiles.Delete(id.ToString());
             WeakReferenceMessenger.Default.Send(new ShellProfileDeletedMessage(id));
         }
@@ -178,7 +214,6 @@ namespace FluentTerminal.App.Services.Implementation
             WeakReferenceMessenger.Default.Send(new ShellProfileDeletedMessage(id));
             WeakReferenceMessenger.Default.Send(new KeyBindingsChangedMessage());
         }
-
 
         public void DeleteTheme(Guid id)
         {
@@ -226,20 +261,26 @@ namespace FluentTerminal.App.Services.Implementation
         public ShellProfile GetDefaultShellProfile()
         {
             var id = GetDefaultShellProfileId();
-            var profile = _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile));
+            var profile = GetShellProfile(id);
             if (profile == null)
             {
                 id = _defaultValueProvider.GetDefaultShellProfileId();
                 SaveDefaultShellProfileId(id);
-                profile = _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile));
+                profile = GetShellProfile(id);
             }
             return profile;
         }
 
         public ShellProfile GetShellProfile(Guid id)
         {
+            if (id == AdministratorPowerShellProfileId)
+            {
+                return CreateAdministratorPowerShellProfile();
+            }
+
             return _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile));
         }
+
         public SshProfile GetSshProfile(Guid id)
         {
             return _sshProfiles.ReadValueFromJson(id.ToString(), default(SshProfile));
@@ -267,13 +308,19 @@ namespace FluentTerminal.App.Services.Implementation
 
         public IEnumerable<ShellProfile> GetShellProfiles()
         {
-            return _shellProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<ShellProfile>((string) x))
-                .Select(MoshBackwardCompatibilityFixProfile);
+            var profiles = _shellProfiles.GetAll()
+                .Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
+                .Select(MoshBackwardCompatibilityFixProfile)
+                .Where(x => x.Id != AdministratorPowerShellProfileId)
+                .ToList();
+
+            profiles.Add(CreateAdministratorPowerShellProfile());
+            return profiles;
         }
 
         public IEnumerable<SshProfile> GetSshProfiles()
         {
-            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<SshProfile>((string) x))
+            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<SshProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile).Cast<SshProfile>();
         }
 
@@ -288,7 +335,6 @@ namespace FluentTerminal.App.Services.Implementation
 
             if (ReferenceEquals(fixedProfile, profile))
             {
-                // Nothing changed
                 return fixedProfile;
             }
 
@@ -374,9 +420,15 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void SaveShellProfile(ShellProfile shellProfile, bool newShell = false)
         {
+            if (shellProfile.Id == AdministratorPowerShellProfileId)
+            {
+                // Keep the generated admin profile immutable. It is a product capability rather than
+                // a user-owned profile and must always retain RunAsAdministrator=true.
+                return;
+            }
+
             _shellProfiles.WriteValueAsJson(shellProfile.Id.ToString(), shellProfile);
 
-            // When saving the shell profile, we also need to update keybindings for everywhere.
             WeakReferenceMessenger.Default.Send(new KeyBindingsChangedMessage());
 
             if (newShell)
@@ -393,7 +445,6 @@ namespace FluentTerminal.App.Services.Implementation
         {
             _sshProfiles.WriteValueAsJson(sshProfile.Id.ToString(), sshProfile);
 
-            // When saving the shell profile, we also need to update keybindings for everywhere.
             WeakReferenceMessenger.Default.Send(new KeyBindingsChangedMessage());
 
             if (newShell)
