@@ -1,8 +1,13 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.IO.Pipes;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using FluentTerminal.Models;
 using FluentTerminal.Models.Requests;
+using Newtonsoft.Json;
 
 namespace FluentTerminal.SystemTray.Services.ConPty
 {
@@ -44,11 +49,9 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
             var shellLocation = ResolveShellLocation(request.Profile.Location);
             ShellExecutableName = Path.GetFileNameWithoutExtension(shellLocation);
-            var cwd = GetWorkingDirectory(request.Profile);
+            var cwd = ResolveWorkingDirectory(request.Profile);
 
-            var args = !string.IsNullOrWhiteSpace(shellLocation)
-                ? $"\"{shellLocation}\" {request.Profile.Arguments}"
-                : request.Profile.Arguments;
+            var args = BuildCommandLine(shellLocation, request.Profile.Arguments);
 
             _terminal = new Terminal();
             _terminal.OutputReady += _terminal_OutputReady;
@@ -59,7 +62,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 request.Size.Columns, request.Size.Rows));
         }
 
-        private static string ResolveShellLocation(string location)
+        internal static string ResolveShellLocation(string location)
         {
             if (string.IsNullOrWhiteSpace(location))
             {
@@ -83,18 +86,25 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             return location;
         }
 
-        private void _terminal_Exited(object sender, EventArgs e)
-        {
-            Close();
-        }
-
-        private string GetWorkingDirectory(ShellProfile configuration)
+        internal static string ResolveWorkingDirectory(ShellProfile configuration)
         {
             if (string.IsNullOrWhiteSpace(configuration.WorkingDirectory) || !Directory.Exists(configuration.WorkingDirectory))
             {
                 return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
             return configuration.WorkingDirectory;
+        }
+
+        internal static string BuildCommandLine(string location, string arguments)
+        {
+            return !string.IsNullOrWhiteSpace(location)
+                ? $"\"{location}\" {arguments}"
+                : arguments;
+        }
+
+        private void _terminal_Exited(object sender, EventArgs e)
+        {
+            Close();
         }
 
         private void _terminal_OutputReady(object sender, EventArgs e)
@@ -142,11 +152,453 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
         public void Dispose()
         {
-            _terminal.Exited -= _terminal_Exited;
-            _terminal.OutputReady -= _terminal_OutputReady;
+            if (_terminal != null)
+            {
+                _terminal.Exited -= _terminal_Exited;
+                _terminal.OutputReady -= _terminal_OutputReady;
+            }
             Dispose(true);
         }
 
         #endregion IDisposable Support
+    }
+
+    /// <summary>
+    /// Proxy for a ConPTY session hosted by a separately elevated copy of the SystemTray executable.
+    /// The UWP app and the normal SystemTray process stay unelevated; only this terminal session's
+    /// helper process receives an administrator token.
+    /// </summary>
+    public sealed class ElevatedConPtySession : ITerminalSession
+    {
+        private NamedPipeServerStream _pipe;
+        private Process _helperProcess;
+        private TerminalsManager _terminalsManager;
+        private bool _disposed;
+        private bool _paused;
+        private int _exitRaised;
+
+        public byte Id { get; private set; }
+
+        public string ShellExecutableName { get; private set; }
+
+        public event EventHandler<int> ConnectionClosed;
+
+        public void Start(CreateTerminalRequest request, TerminalsManager terminalsManager)
+        {
+            Id = request.Id;
+            _terminalsManager = terminalsManager;
+
+            var shellLocation = ConPtySession.ResolveShellLocation(request.Profile.Location);
+            ShellExecutableName = Path.GetFileNameWithoutExtension(shellLocation);
+
+            var pipeName = $"FluentTerminalPlus-Elevated-{Process.GetCurrentProcess().Id}-{Guid.NewGuid():N}";
+            _pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
+                PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+
+            LaunchElevatedHelper(pipeName);
+            WaitForHelperConnection();
+
+            var startRequest = new ElevatedStartRequest
+            {
+                CommandLine = ConPtySession.BuildCommandLine(shellLocation, request.Profile.Arguments),
+                WorkingDirectory = ConPtySession.ResolveWorkingDirectory(request.Profile),
+                Environment = terminalsManager.GetDefaultEnvironmentVariableString(request.Profile.EnvironmentVariables),
+                Columns = request.Size.Columns,
+                Rows = request.Size.Rows
+            };
+
+            ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Start,
+                Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(startRequest)));
+
+            var response = ElevatedPipeProtocol.Read(_pipe);
+            if (response == null)
+            {
+                throw new IOException("Elevated terminal helper disconnected during startup.");
+            }
+
+            if (response.Type == ElevatedMessageType.Error)
+            {
+                throw new InvalidOperationException(Encoding.UTF8.GetString(response.Payload));
+            }
+
+            if (response.Type != ElevatedMessageType.Started)
+            {
+                throw new InvalidDataException($"Unexpected elevated helper response: {response.Type}");
+            }
+
+            Task.Factory.StartNew(ReadLoop, CancellationToken.None,
+                TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        }
+
+        private void LaunchElevatedHelper(string pipeName)
+        {
+            var executablePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrWhiteSpace(executablePath))
+            {
+                throw new InvalidOperationException("Could not determine the SystemTray executable path.");
+            }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = executablePath,
+                Arguments = $"--elevated-session \"{pipeName}\"",
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = Path.GetDirectoryName(executablePath)
+            };
+
+            // Process.Start throws Win32Exception(ERROR_CANCELLED) when the UAC prompt is declined.
+            _helperProcess = Process.Start(startInfo);
+            if (_helperProcess == null)
+            {
+                throw new InvalidOperationException("Windows did not start the elevated terminal helper.");
+            }
+        }
+
+        private void WaitForHelperConnection()
+        {
+            var result = _pipe.BeginWaitForConnection(null, null);
+            try
+            {
+                if (!result.AsyncWaitHandle.WaitOne(TimeSpan.FromMinutes(2)))
+                {
+                    throw new TimeoutException("Timed out waiting for the elevated terminal helper.");
+                }
+
+                _pipe.EndWaitForConnection(result);
+            }
+            finally
+            {
+                result.AsyncWaitHandle.Close();
+            }
+        }
+
+        private void ReadLoop()
+        {
+            try
+            {
+                while (!_disposed && _pipe?.IsConnected == true)
+                {
+                    var message = ElevatedPipeProtocol.Read(_pipe);
+                    if (message == null)
+                    {
+                        break;
+                    }
+
+                    switch (message.Type)
+                    {
+                        case ElevatedMessageType.Output:
+                            if (!_paused)
+                            {
+                                _terminalsManager.DisplayTerminalOutput(Id, message.Payload);
+                            }
+                            break;
+                        case ElevatedMessageType.Exit:
+                            var exitCode = message.Payload.Length >= sizeof(int)
+                                ? BitConverter.ToInt32(message.Payload, 0)
+                                : -1;
+                            RaiseConnectionClosed(exitCode);
+                            return;
+                        case ElevatedMessageType.Error:
+                            var text = Encoding.UTF8.GetString(message.Payload);
+                            _terminalsManager.DisplayTerminalOutput(Id,
+                                Encoding.UTF8.GetBytes($"\r\n[FluentTerminalPlus elevated helper] {text}\r\n"));
+                            RaiseConnectionClosed(-1);
+                            return;
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                if (!_disposed)
+                {
+                    RaiseConnectionClosed(-1);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Expected while closing a tab.
+            }
+        }
+
+        public void Write(byte[] data)
+        {
+            if (!_disposed && _pipe?.IsConnected == true)
+            {
+                ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Input, data ?? Array.Empty<byte>());
+            }
+        }
+
+        public void Resize(TerminalSize size)
+        {
+            if (_disposed || _pipe?.IsConnected != true)
+            {
+                return;
+            }
+
+            var payload = new ElevatedResizeRequest { Columns = size.Columns, Rows = size.Rows };
+            ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Resize,
+                Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(payload)));
+        }
+
+        public void Pause(bool value)
+        {
+            _paused = value;
+        }
+
+        public void Close()
+        {
+            if (!_disposed && _pipe?.IsConnected == true)
+            {
+                try
+                {
+                    ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Close, Array.Empty<byte>());
+                }
+                catch (IOException)
+                {
+                    // The helper may already be exiting.
+                }
+            }
+
+            RaiseConnectionClosed(-1);
+            Dispose();
+        }
+
+        private void RaiseConnectionClosed(int exitCode)
+        {
+            if (Interlocked.Exchange(ref _exitRaised, 1) == 0)
+            {
+                ConnectionClosed?.Invoke(this, exitCode);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _pipe?.Dispose();
+            _pipe = null;
+
+            _helperProcess?.Dispose();
+            _helperProcess = null;
+        }
+    }
+
+    /// <summary>
+    /// Entry point used by the elevated SystemTray process. It hosts exactly one ConPTY session and
+    /// communicates with the normal SystemTray process over a private, random named pipe.
+    /// </summary>
+    internal static class ElevatedConPtyHost
+    {
+        public static void Run(string pipeName)
+        {
+            using (var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut,
+                       PipeOptions.Asynchronous))
+            {
+                pipe.Connect((int)TimeSpan.FromMinutes(2).TotalMilliseconds);
+
+                var startMessage = ElevatedPipeProtocol.Read(pipe);
+                if (startMessage == null || startMessage.Type != ElevatedMessageType.Start)
+                {
+                    return;
+                }
+
+                var request = JsonConvert.DeserializeObject<ElevatedStartRequest>(
+                    Encoding.UTF8.GetString(startMessage.Payload));
+                if (request == null)
+                {
+                    ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
+                        Encoding.UTF8.GetBytes("Invalid elevated terminal start request."));
+                    return;
+                }
+
+                Terminal terminal = null;
+                BufferedReader reader = null;
+
+                try
+                {
+                    terminal = new Terminal();
+                    terminal.OutputReady += (sender, args) =>
+                    {
+                        ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Started, Array.Empty<byte>());
+                        reader = new BufferedReader(terminal.ConsoleOutStream,
+                            bytes => ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Output, bytes), false);
+                    };
+                    terminal.Exited += (sender, args) =>
+                    {
+                        ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Exit,
+                            BitConverter.GetBytes(terminal.ExitCode));
+                    };
+
+                    Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            terminal.Start(request.CommandLine, request.WorkingDirectory, request.Environment,
+                                request.Columns, request.Rows);
+                        }
+                        catch (Exception ex)
+                        {
+                            try
+                            {
+                                ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
+                                    Encoding.UTF8.GetBytes(ex.ToString()));
+                            }
+                            catch
+                            {
+                                // The parent may already have disconnected.
+                            }
+                        }
+                    }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+                    while (pipe.IsConnected)
+                    {
+                        var message = ElevatedPipeProtocol.Read(pipe);
+                        if (message == null)
+                        {
+                            break;
+                        }
+
+                        switch (message.Type)
+                        {
+                            case ElevatedMessageType.Input:
+                                terminal.WriteToPseudoConsole(message.Payload);
+                                break;
+                            case ElevatedMessageType.Resize:
+                                var resize = JsonConvert.DeserializeObject<ElevatedResizeRequest>(
+                                    Encoding.UTF8.GetString(message.Payload));
+                                if (resize != null)
+                                {
+                                    terminal.Resize(resize.Columns, resize.Rows);
+                                }
+                                break;
+                            case ElevatedMessageType.Close:
+                                return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
+                            Encoding.UTF8.GetBytes(ex.ToString()));
+                    }
+                    catch
+                    {
+                        // Nothing else can be reported if the pipe is already gone.
+                    }
+                }
+                finally
+                {
+                    reader?.Dispose();
+                    terminal?.Dispose();
+                }
+            }
+        }
+    }
+
+    internal enum ElevatedMessageType : byte
+    {
+        Start = 1,
+        Started = 2,
+        Input = 3,
+        Resize = 4,
+        Close = 5,
+        Output = 6,
+        Exit = 7,
+        Error = 8
+    }
+
+    internal sealed class ElevatedPipeMessage
+    {
+        public ElevatedMessageType Type { get; set; }
+        public byte[] Payload { get; set; }
+    }
+
+    internal sealed class ElevatedStartRequest
+    {
+        public string CommandLine { get; set; }
+        public string WorkingDirectory { get; set; }
+        public string Environment { get; set; }
+        public int Columns { get; set; }
+        public int Rows { get; set; }
+    }
+
+    internal sealed class ElevatedResizeRequest
+    {
+        public int Columns { get; set; }
+        public int Rows { get; set; }
+    }
+
+    internal static class ElevatedPipeProtocol
+    {
+        private const int HeaderSize = 5;
+        private const int MaxPayloadSize = 16 * 1024 * 1024;
+
+        public static void Write(Stream stream, ElevatedMessageType type, byte[] payload)
+        {
+            payload = payload ?? Array.Empty<byte>();
+            var header = new byte[HeaderSize];
+            header[0] = (byte)type;
+            Buffer.BlockCopy(BitConverter.GetBytes(payload.Length), 0, header, 1, sizeof(int));
+
+            lock (stream)
+            {
+                stream.Write(header, 0, header.Length);
+                if (payload.Length > 0)
+                {
+                    stream.Write(payload, 0, payload.Length);
+                }
+                stream.Flush();
+            }
+        }
+
+        public static ElevatedPipeMessage Read(Stream stream)
+        {
+            var header = new byte[HeaderSize];
+            if (!ReadExact(stream, header, header.Length))
+            {
+                return null;
+            }
+
+            var payloadLength = BitConverter.ToInt32(header, 1);
+            if (payloadLength < 0 || payloadLength > MaxPayloadSize)
+            {
+                throw new InvalidDataException($"Invalid elevated pipe payload length: {payloadLength}");
+            }
+
+            var payload = new byte[payloadLength];
+            if (payloadLength > 0 && !ReadExact(stream, payload, payloadLength))
+            {
+                return null;
+            }
+
+            return new ElevatedPipeMessage
+            {
+                Type = (ElevatedMessageType)header[0],
+                Payload = payload
+            };
+        }
+
+        private static bool ReadExact(Stream stream, byte[] buffer, int count)
+        {
+            var offset = 0;
+            while (offset < count)
+            {
+                var read = stream.Read(buffer, offset, count - offset);
+                if (read == 0)
+                {
+                    return false;
+                }
+                offset += read;
+            }
+            return true;
+        }
     }
 }
