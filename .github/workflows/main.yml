@@ -31,3 +31,15 @@ jobs:
 
       - name: Build solution
         run: msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 -m -restore
+
+      - name: Upload x64 Debug artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FluentTerminalPlus-x64-Debug
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            FluentTerminal.Package/AppPackages/**
+            FluentTerminal.Package/bin/x64/Debug/**
+            FluentTerminal.App/bin/x64/Debug/**
+            FluentTerminal.SystemTray/bin/x64/Debug/**
