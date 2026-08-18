@@ -1,4 +1,4 @@
-﻿using FluentTerminal.App.Services;
+using FluentTerminal.App.Services;
 using FluentTerminal.Models;
 using FluentTerminal.Models.Enums;
 using FluentTerminal.Models.Requests;
@@ -118,7 +118,19 @@ namespace FluentTerminal.SystemTray.Services
             ITerminalSession terminal = null;
             try
             {
-                if (request.SessionType == SessionType.WinPty)
+                if (request.Profile.RunAsAdministrator)
+                {
+                    if (request.SessionType == SessionType.WinPty)
+                    {
+                        return new CreateTerminalResponse
+                        {
+                            Error = "Administrator terminals require ConPTY."
+                        };
+                    }
+
+                    terminal = new ElevatedConPtySession();
+                }
+                else if (request.SessionType == SessionType.WinPty)
                 {
                     terminal = new WinPtySession();
                 }
@@ -130,6 +142,7 @@ namespace FluentTerminal.SystemTray.Services
             }
             catch (Exception e)
             {
+                terminal?.Dispose();
                 return new CreateTerminalResponse { Error = e.ToString() };
             }
 
@@ -207,7 +220,7 @@ namespace FluentTerminal.SystemTray.Services
         public string GetDefaultEnvironmentVariableString(Dictionary<string, string> additionalVariables)
         {
             var environmentVariables = Environment.GetEnvironmentVariables();
-            environmentVariables["TERM_PROGRAM"] = "FluentTerminal";
+            environmentVariables["TERM_PROGRAM"] = "FluentTerminalPlus";
             environmentVariables["TERM_PROGRAM_VERSION"] = $"{Package.Current.Id.Version.Major}.{Package.Current.Id.Version.Minor}.{Package.Current.Id.Version.Build}.{Package.Current.Id.Version.Revision}";
 
             if (additionalVariables != null)
