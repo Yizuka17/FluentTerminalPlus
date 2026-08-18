@@ -59,7 +59,9 @@ jobs:
           }
 
           Write-Host "Building against Windows SDK $sdkVersion"
-          msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 "-p:TargetPlatformVersion=$sdkVersion" -m -restore 2>&1 | Tee-Object -FilePath msbuild.log
+          # This legacy solution builds SystemTray both directly and through the packaging project.
+          # Parallel MSBuild nodes race on the same obj/resource files, so keep the graph serialized.
+          msbuild FluentTerminal.sln -t:build -p:Configuration=Debug -p:Platform=x64 "-p:TargetPlatformVersion=$sdkVersion" -m:1 -restore 2>&1 | Tee-Object -FilePath msbuild.log
           exit $LASTEXITCODE
 
       - name: Upload x64 Debug artifacts and logs
