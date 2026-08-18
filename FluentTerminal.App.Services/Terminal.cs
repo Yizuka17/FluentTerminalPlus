@@ -137,6 +137,13 @@ namespace FluentTerminal.App.Services
             {
                 title = _fallbackTitle;
             }
+
+            if (Profile?.RunAsAdministrator == true &&
+                !title.StartsWith("[Admin] ", StringComparison.OrdinalIgnoreCase))
+            {
+                title = $"[Admin] {title}";
+            }
+
             TitleChanged?.Invoke(this, title);
         }
 
