@@ -1,4 +1,4 @@
-﻿using FluentTerminal.Models;
+using FluentTerminal.Models;
 using FluentTerminal.Models.Requests;
 using Newtonsoft.Json;
 using System.Threading;
@@ -23,7 +23,7 @@ namespace FluentTerminal.SystemTray.Services
         private readonly ToggleWindowService _toggleWindowService;
         private readonly ISettingsService _settingsService;
 
-        public const string EventWaitHandleName = "FluentTerminalNewInstanceEvent";
+        public const string EventWaitHandleName = "FluentTerminalPlusNewInstanceEvent";
 
         public AppCommunicationService(TerminalsManager terminalsManager, ToggleWindowService toggleWindowService, ISettingsService settingsService)
         {
@@ -219,7 +219,6 @@ namespace FluentTerminal.SystemTray.Services
 
         private async Task HandleReadTextFileRequestAsync(AppServiceRequestReceivedEventArgs args)
         {
-            var deferreal = args.GetDeferral();
             var deferral = args.GetDeferral();
             var messageContent = (string)args.Request.Message[MessageKeys.Content];
             var request = JsonConvert.DeserializeObject<ReadTextFileRequest>(messageContent);
@@ -290,7 +289,7 @@ namespace FluentTerminal.SystemTray.Services
             var request = JsonConvert.DeserializeObject<UpdateSettingsRequest>(messageContent);
             _settingsService.NotifyApplicationSettingsChanged(request.Settings);
         }
-        
+
         private async Task HandlePauseTerminalOutputRequestAsync(AppServiceRequestReceivedEventArgs args)
         {
             var deferral = args.GetDeferral();
