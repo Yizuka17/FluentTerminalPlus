@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using FluentTerminal.Models;
@@ -42,11 +42,12 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             Id = request.Id;
             _terminalsManager = terminalsManager;
 
-            ShellExecutableName = Path.GetFileNameWithoutExtension(request.Profile.Location);
+            var shellLocation = ResolveShellLocation(request.Profile.Location);
+            ShellExecutableName = Path.GetFileNameWithoutExtension(shellLocation);
             var cwd = GetWorkingDirectory(request.Profile);
 
-            var args = !string.IsNullOrWhiteSpace(request.Profile.Location)
-                ? $"\"{request.Profile.Location}\" {request.Profile.Arguments}"
+            var args = !string.IsNullOrWhiteSpace(shellLocation)
+                ? $"\"{shellLocation}\" {request.Profile.Arguments}"
                 : request.Profile.Arguments;
 
             _terminal = new Terminal();
@@ -56,6 +57,30 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             Task.Factory.StartNew(() => _terminal.Start(args, cwd,
                 terminalsManager.GetDefaultEnvironmentVariableString(request.Profile.EnvironmentVariables),
                 request.Size.Columns, request.Size.Rows));
+        }
+
+        private static string ResolveShellLocation(string location)
+        {
+            if (string.IsNullOrWhiteSpace(location))
+            {
+                return location;
+            }
+
+            // Fluent Terminal's preinstalled PowerShell profile points at Windows PowerShell 5.1.
+            // FluentTerminalPlus prefers PowerShell 7 while preserving the legacy profile as a fallback
+            // so existing settings continue to work without a migration.
+            if (location.EndsWith(@"\WindowsPowerShell\v1.0\powershell.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                var powerShell7 = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
+
+                if (File.Exists(powerShell7))
+                {
+                    return powerShell7;
+                }
+            }
+
+            return location;
         }
 
         private void _terminal_Exited(object sender, EventArgs e)
