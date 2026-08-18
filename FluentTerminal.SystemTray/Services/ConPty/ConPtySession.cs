@@ -15,32 +15,17 @@ namespace FluentTerminal.SystemTray.Services.ConPty
     {
         private TerminalsManager _terminalsManager;
         private Terminal _terminal;
-
         private BufferedReader _reader;
         private bool _enableBuffer;
+        private bool _disposed;
 
         public byte Id { get; private set; }
-
         public string ShellExecutableName { get; private set; }
-
         public event EventHandler<int> ConnectionClosed;
-
-        public void Close()
-        {
-            _reader?.Dispose();
-
-            ConnectionClosed?.Invoke(this, _terminal.ExitCode);
-        }
-
-        public void Resize(TerminalSize size)
-        {
-            _terminal?.Resize(size.Columns, size.Rows);
-        }
 
         public void Start(CreateTerminalRequest request, TerminalsManager terminalsManager)
         {
             _enableBuffer = false; // request.Profile.UseBuffer;
-
             _reader?.Dispose();
             _reader = null;
 
@@ -50,16 +35,18 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             var shellLocation = ResolveShellLocation(request.Profile.Location);
             ShellExecutableName = Path.GetFileNameWithoutExtension(shellLocation);
             var cwd = ResolveWorkingDirectory(request.Profile);
-
             var args = BuildCommandLine(shellLocation, request.Profile.Arguments);
 
             _terminal = new Terminal();
-            _terminal.OutputReady += _terminal_OutputReady;
-            _terminal.Exited += _terminal_Exited;
+            _terminal.OutputReady += OnTerminalOutputReady;
+            _terminal.Exited += OnTerminalExited;
 
-            Task.Factory.StartNew(() => _terminal.Start(args, cwd,
+            Task.Factory.StartNew(() => _terminal.Start(
+                args,
+                cwd,
                 terminalsManager.GetDefaultEnvironmentVariableString(request.Profile.EnvironmentVariables),
-                request.Size.Columns, request.Size.Rows));
+                request.Size.Columns,
+                request.Size.Rows));
         }
 
         internal static string ResolveShellLocation(string location)
@@ -69,15 +56,13 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 return location;
             }
 
-            // Fluent Terminal's preinstalled PowerShell profile points at Windows PowerShell 5.1.
-            // FluentTerminalPlus prefers PowerShell 7 while preserving the legacy profile as a fallback
-            // so existing settings continue to work without a migration.
+            // Upstream's built-in profile points to Windows PowerShell 5.1. Prefer PS7 without
+            // forcing a settings migration; machines without PS7 keep the original fallback.
             if (location.EndsWith(@"\WindowsPowerShell\v1.0\powershell.exe", StringComparison.OrdinalIgnoreCase))
             {
                 var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
                 var powerShell7 = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
-
-                if (File.Exists(powerShell7))
+                if (System.IO.File.Exists(powerShell7))
                 {
                     return powerShell7;
                 }
@@ -86,13 +71,14 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             return location;
         }
 
-        internal static string ResolveWorkingDirectory(ShellProfile configuration)
+        internal static string ResolveWorkingDirectory(ShellProfile profile)
         {
-            if (string.IsNullOrWhiteSpace(configuration.WorkingDirectory) || !Directory.Exists(configuration.WorkingDirectory))
+            if (string.IsNullOrWhiteSpace(profile.WorkingDirectory) || !Directory.Exists(profile.WorkingDirectory))
             {
                 return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
-            return configuration.WorkingDirectory;
+
+            return profile.WorkingDirectory;
         }
 
         internal static string BuildCommandLine(string location, string arguments)
@@ -102,18 +88,31 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 : arguments;
         }
 
-        private void _terminal_Exited(object sender, EventArgs e)
+        private void OnTerminalExited(object sender, EventArgs e)
         {
             Close();
         }
 
-        private void _terminal_OutputReady(object sender, EventArgs e)
+        private void OnTerminalOutputReady(object sender, EventArgs e)
         {
             if (_reader == null)
             {
-                _reader = new BufferedReader(_terminal.ConsoleOutStream,
-                    bytes => _terminalsManager.DisplayTerminalOutput(Id, bytes), _enableBuffer);
+                _reader = new BufferedReader(
+                    _terminal.ConsoleOutStream,
+                    bytes => _terminalsManager.DisplayTerminalOutput(Id, bytes),
+                    _enableBuffer);
             }
+        }
+
+        public void Close()
+        {
+            _reader?.Dispose();
+            ConnectionClosed?.Invoke(this, _terminal?.ExitCode ?? -1);
+        }
+
+        public void Resize(TerminalSize size)
+        {
+            _terminal?.Resize(size.Columns, size.Rows);
         }
 
         public void Write(byte[] data)
@@ -131,42 +130,38 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             Dispose(false);
         }
 
-        #region IDisposable Support
-
-        private bool _disposed;
-
         private void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                if (disposing)
-                {
-                    _terminal?.Dispose();
-                }
-
-                _disposed = true;
-
-                _reader?.Dispose();
+                return;
             }
+
+            if (disposing)
+            {
+                _terminal?.Dispose();
+            }
+
+            _disposed = true;
+            _reader?.Dispose();
         }
 
         public void Dispose()
         {
             if (_terminal != null)
             {
-                _terminal.Exited -= _terminal_Exited;
-                _terminal.OutputReady -= _terminal_OutputReady;
+                _terminal.Exited -= OnTerminalExited;
+                _terminal.OutputReady -= OnTerminalOutputReady;
             }
-            Dispose(true);
-        }
 
-        #endregion IDisposable Support
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
     }
 
     /// <summary>
-    /// Proxy for a ConPTY session hosted by a separately elevated copy of the SystemTray executable.
-    /// The UWP app and the normal SystemTray process stay unelevated; only this terminal session's
-    /// helper process receives an administrator token.
+    /// Proxies one ConPTY session hosted by a separately elevated SystemTray process. The UWP UI and
+    /// the normal broker remain at medium integrity; only this tab's helper receives an admin token.
     /// </summary>
     public sealed class ElevatedConPtySession : ITerminalSession
     {
@@ -178,9 +173,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
         private int _exitRaised;
 
         public byte Id { get; private set; }
-
         public string ShellExecutableName { get; private set; }
-
         public event EventHandler<int> ConnectionClosed;
 
         public void Start(CreateTerminalRequest request, TerminalsManager terminalsManager)
@@ -192,8 +185,12 @@ namespace FluentTerminal.SystemTray.Services.ConPty
             ShellExecutableName = Path.GetFileNameWithoutExtension(shellLocation);
 
             var pipeName = $"FluentTerminalPlus-Elevated-{Process.GetCurrentProcess().Id}-{Guid.NewGuid():N}";
-            _pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
-                PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            _pipe = new NamedPipeServerStream(
+                pipeName,
+                PipeDirection.InOut,
+                1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
 
             LaunchElevatedHelper(pipeName);
             WaitForHelperConnection();
@@ -207,7 +204,9 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 Rows = request.Size.Rows
             };
 
-            ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Start,
+            ElevatedPipeProtocol.Write(
+                _pipe,
+                ElevatedMessageType.Start,
                 Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(startRequest)));
 
             var response = ElevatedPipeProtocol.Read(_pipe);
@@ -226,8 +225,11 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 throw new InvalidDataException($"Unexpected elevated helper response: {response.Type}");
             }
 
-            Task.Factory.StartNew(ReadLoop, CancellationToken.None,
-                TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            Task.Factory.StartNew(
+                ReadLoop,
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
         }
 
         private void LaunchElevatedHelper(string pipeName)
@@ -248,7 +250,6 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 WorkingDirectory = Path.GetDirectoryName(executablePath)
             };
 
-            // Process.Start throws Win32Exception(ERROR_CANCELLED) when the UAC prompt is declined.
             _helperProcess = Process.Start(startInfo);
             if (_helperProcess == null)
             {
@@ -294,19 +295,29 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                                 _terminalsManager.DisplayTerminalOutput(Id, message.Payload);
                             }
                             break;
+
                         case ElevatedMessageType.Exit:
                             var exitCode = message.Payload.Length >= sizeof(int)
-                                ? BitConverter.ToInt32(message.Payload, 0)
+                                ? System.BitConverter.ToInt32(message.Payload, 0)
                                 : -1;
                             RaiseConnectionClosed(exitCode);
                             return;
+
                         case ElevatedMessageType.Error:
                             var text = Encoding.UTF8.GetString(message.Payload);
-                            _terminalsManager.DisplayTerminalOutput(Id,
+                            _terminalsManager.DisplayTerminalOutput(
+                                Id,
                                 Encoding.UTF8.GetBytes($"\r\n[FluentTerminalPlus elevated helper] {text}\r\n"));
                             RaiseConnectionClosed(-1);
                             return;
                     }
+                }
+
+                // If the helper is killed or otherwise disappears without an Exit frame, do not leave
+                // a dead administrator tab hanging indefinitely.
+                if (!_disposed)
+                {
+                    RaiseConnectionClosed(-1);
                 }
             }
             catch (IOException)
@@ -337,8 +348,15 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 return;
             }
 
-            var payload = new ElevatedResizeRequest { Columns = size.Columns, Rows = size.Rows };
-            ElevatedPipeProtocol.Write(_pipe, ElevatedMessageType.Resize,
+            var payload = new ElevatedResizeRequest
+            {
+                Columns = size.Columns,
+                Rows = size.Rows
+            };
+
+            ElevatedPipeProtocol.Write(
+                _pipe,
+                ElevatedMessageType.Resize,
                 Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(payload)));
         }
 
@@ -358,6 +376,10 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 catch (IOException)
                 {
                     // The helper may already be exiting.
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Closing raced with disposal.
                 }
             }
 
@@ -390,14 +412,17 @@ namespace FluentTerminal.SystemTray.Services.ConPty
     }
 
     /// <summary>
-    /// Entry point used by the elevated SystemTray process. It hosts exactly one ConPTY session and
-    /// communicates with the normal SystemTray process over a private, random named pipe.
+    /// Special SystemTray mode used by an elevated helper. It owns exactly one ConPTY session and
+    /// exchanges framed VT data with the normal broker over a random per-tab named pipe.
     /// </summary>
     internal static class ElevatedConPtyHost
     {
         public static void Run(string pipeName)
         {
-            using (var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut,
+            using (var pipe = new NamedPipeClientStream(
+                       ".",
+                       pipeName,
+                       PipeDirection.InOut,
                        PipeOptions.Asynchronous))
             {
                 pipe.Connect((int)TimeSpan.FromMinutes(2).TotalMilliseconds);
@@ -410,9 +435,12 @@ namespace FluentTerminal.SystemTray.Services.ConPty
 
                 var request = JsonConvert.DeserializeObject<ElevatedStartRequest>(
                     Encoding.UTF8.GetString(startMessage.Payload));
+
                 if (request == null)
                 {
-                    ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
+                    ElevatedPipeProtocol.Write(
+                        pipe,
+                        ElevatedMessageType.Error,
                         Encoding.UTF8.GetBytes("Invalid elevated terminal start request."));
                     return;
                 }
@@ -426,33 +454,45 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                     terminal.OutputReady += (sender, args) =>
                     {
                         ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Started, Array.Empty<byte>());
-                        reader = new BufferedReader(terminal.ConsoleOutStream,
-                            bytes => ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Output, bytes), false);
+                        reader = new BufferedReader(
+                            terminal.ConsoleOutStream,
+                            bytes => ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Output, bytes),
+                            false);
                     };
+
                     terminal.Exited += (sender, args) =>
                     {
-                        ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Exit,
-                            BitConverter.GetBytes(terminal.ExitCode));
+                        try
+                        {
+                            ElevatedPipeProtocol.Write(
+                                pipe,
+                                ElevatedMessageType.Exit,
+                                System.BitConverter.GetBytes(terminal.ExitCode));
+                        }
+                        catch (IOException)
+                        {
+                            // Parent already disconnected.
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // Parent already disconnected.
+                        }
                     };
 
                     Task.Factory.StartNew(() =>
                     {
                         try
                         {
-                            terminal.Start(request.CommandLine, request.WorkingDirectory, request.Environment,
-                                request.Columns, request.Rows);
+                            terminal.Start(
+                                request.CommandLine,
+                                request.WorkingDirectory,
+                                request.Environment,
+                                request.Columns,
+                                request.Rows);
                         }
                         catch (Exception ex)
                         {
-                            try
-                            {
-                                ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
-                                    Encoding.UTF8.GetBytes(ex.ToString()));
-                            }
-                            catch
-                            {
-                                // The parent may already have disconnected.
-                            }
+                            TrySendError(pipe, ex);
                         }
                     }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
@@ -469,6 +509,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                             case ElevatedMessageType.Input:
                                 terminal.WriteToPseudoConsole(message.Payload);
                                 break;
+
                             case ElevatedMessageType.Resize:
                                 var resize = JsonConvert.DeserializeObject<ElevatedResizeRequest>(
                                     Encoding.UTF8.GetString(message.Payload));
@@ -477,6 +518,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                                     terminal.Resize(resize.Columns, resize.Rows);
                                 }
                                 break;
+
                             case ElevatedMessageType.Close:
                                 return;
                         }
@@ -484,21 +526,28 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 }
                 catch (Exception ex)
                 {
-                    try
-                    {
-                        ElevatedPipeProtocol.Write(pipe, ElevatedMessageType.Error,
-                            Encoding.UTF8.GetBytes(ex.ToString()));
-                    }
-                    catch
-                    {
-                        // Nothing else can be reported if the pipe is already gone.
-                    }
+                    TrySendError(pipe, ex);
                 }
                 finally
                 {
                     reader?.Dispose();
                     terminal?.Dispose();
                 }
+            }
+        }
+
+        private static void TrySendError(Stream pipe, Exception exception)
+        {
+            try
+            {
+                ElevatedPipeProtocol.Write(
+                    pipe,
+                    ElevatedMessageType.Error,
+                    Encoding.UTF8.GetBytes(exception.ToString()));
+            }
+            catch
+            {
+                // There is nowhere left to report the error if the parent pipe is gone.
             }
         }
     }
@@ -544,9 +593,10 @@ namespace FluentTerminal.SystemTray.Services.ConPty
         public static void Write(Stream stream, ElevatedMessageType type, byte[] payload)
         {
             payload = payload ?? Array.Empty<byte>();
+
             var header = new byte[HeaderSize];
             header[0] = (byte)type;
-            Buffer.BlockCopy(BitConverter.GetBytes(payload.Length), 0, header, 1, sizeof(int));
+            Buffer.BlockCopy(System.BitConverter.GetBytes(payload.Length), 0, header, 1, sizeof(int));
 
             lock (stream)
             {
@@ -567,7 +617,7 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 return null;
             }
 
-            var payloadLength = BitConverter.ToInt32(header, 1);
+            var payloadLength = System.BitConverter.ToInt32(header, 1);
             if (payloadLength < 0 || payloadLength > MaxPayloadSize)
             {
                 throw new InvalidDataException($"Invalid elevated pipe payload length: {payloadLength}");
@@ -596,8 +646,10 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 {
                     return false;
                 }
+
                 offset += read;
             }
+
             return true;
         }
     }
