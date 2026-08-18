@@ -17,6 +17,9 @@ namespace FluentTerminal.App.Services.Implementation
         public const string DefaultShellProfileKey = "DefaultShellProfile";
         public const string DefaultSshProfileKey = "DefaultSshProfile";
 
+        private static readonly Guid BuiltInPowerShellProfileId =
+            Guid.Parse("813f2298-210a-481a-bdbf-c17bc637a3e2");
+
         // This profile is intentionally virtual instead of being persisted into the user's settings.
         // Existing Fluent Terminal installations therefore gain an administrator entry without a
         // settings migration, and removing/resetting settings cannot accidentally strip elevation.
@@ -67,8 +70,8 @@ namespace FluentTerminal.App.Services.Implementation
                 Name = "PowerShell 7 (Admin)",
                 MigrationVersion = ShellProfile.CurrentMigrationVersion,
                 Arguments = string.Empty,
-                // Reuse Fluent Terminal's legacy PowerShell location here. The ConPTY launch layer
-                // upgrades this location to PowerShell 7 when pwsh.exe is installed.
+                // The ConPTY launch layer upgrades this legacy path to PowerShell 7 when pwsh.exe is installed,
+                // while retaining Windows PowerShell as a safe fallback on machines without PS7.
                 Location = @"C:\windows\system32\WindowsPowerShell\v1.0\powershell.exe",
                 PreInstalled = true,
                 WorkingDirectory = string.Empty,
@@ -80,6 +83,16 @@ namespace FluentTerminal.App.Services.Implementation
                     ["TERM"] = "xterm-256color"
                 }
             };
+        }
+
+        private static ShellProfile NormalizeBuiltInPowerShellProfile(ShellProfile profile)
+        {
+            if (profile != null && profile.Id == BuiltInPowerShellProfileId && profile.PreInstalled)
+            {
+                profile.Name = "PowerShell 7";
+            }
+
+            return profile;
         }
 
         public string ExportSettings()
@@ -100,7 +113,7 @@ namespace FluentTerminal.App.Services.Implementation
                 config.Themes.Add(theme);
             }
 
-            foreach (var profile in GetShellProfiles())
+            foreach (var profile in GetShellProfiles().Where(x => x.Id != AdministratorPowerShellProfileId))
             {
                 config.Profiles.Add(profile);
             }
@@ -278,7 +291,8 @@ namespace FluentTerminal.App.Services.Implementation
                 return CreateAdministratorPowerShellProfile();
             }
 
-            return _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile));
+            return NormalizeBuiltInPowerShellProfile(
+                _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile)));
         }
 
         public SshProfile GetSshProfile(Guid id)
@@ -311,6 +325,7 @@ namespace FluentTerminal.App.Services.Implementation
             var profiles = _shellProfiles.GetAll()
                 .Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile)
+                .Select(NormalizeBuiltInPowerShellProfile)
                 .Where(x => x.Id != AdministratorPowerShellProfileId)
                 .ToList();
 
@@ -395,7 +410,7 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void SaveCurrentThemeId(Guid id)
         {
-            _roamingSettings.SetValue(CurrentThemeKey, id);
+            _localSettings.SetValue(CurrentThemeKey, id);
 
             WeakReferenceMessenger.Default.Send(new CurrentThemeChangedMessage(id));
         }
