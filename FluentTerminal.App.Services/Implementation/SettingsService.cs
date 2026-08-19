@@ -4,7 +4,6 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
 using FluentTerminal.App.Services.Utilities;
 using FluentTerminal.Models.Messages;
@@ -68,25 +67,6 @@ namespace FluentTerminal.App.Services.Implementation
             }
         }
 
-        private static string GetPowerShell7ExecutablePath()
-        {
-            var programFiles = Environment.GetEnvironmentVariable("ProgramW6432");
-            if (string.IsNullOrWhiteSpace(programFiles))
-            {
-                programFiles = Environment.GetEnvironmentVariable("ProgramFiles");
-            }
-            if (string.IsNullOrWhiteSpace(programFiles))
-            {
-                programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            }
-            if (string.IsNullOrWhiteSpace(programFiles))
-            {
-                programFiles = @"C:\Program Files";
-            }
-
-            return Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
-        }
-
         private static ShellProfile CreatePowerShell7Profile()
         {
             return new ShellProfile
@@ -95,7 +75,9 @@ namespace FluentTerminal.App.Services.Implementation
                 Name = "PowerShell 7",
                 MigrationVersion = ShellProfile.CurrentMigrationVersion,
                 Arguments = string.Empty,
-                Location = GetPowerShell7ExecutablePath(),
+                // Do not persist a versioned Program Files/WindowsApps path. The full-trust broker
+                // resolves pwsh.exe at launch time, including Microsoft Store app execution aliases.
+                Location = "pwsh.exe",
                 PreInstalled = true,
                 WorkingDirectory = string.Empty,
                 UseConPty = true,
@@ -107,11 +89,24 @@ namespace FluentTerminal.App.Services.Implementation
             };
         }
 
-        private static ShellProfile NormalizeBuiltInWindowsPowerShellProfile(ShellProfile profile)
+        private static ShellProfile NormalizePlusBuiltInShellProfile(ShellProfile profile)
         {
-            if (profile != null && profile.Id == BuiltInWindowsPowerShellProfileId && profile.PreInstalled)
+            if (profile == null || !profile.PreInstalled)
+            {
+                return profile;
+            }
+
+            if (profile.Id == BuiltInWindowsPowerShellProfileId)
             {
                 profile.Name = "Windows PowerShell";
+            }
+            else if (profile.Id == PowerShell7ProfileId)
+            {
+                // Migrate profiles created by early Plus builds, which stored
+                // C:\Program Files\PowerShell\7\pwsh.exe and therefore missed Store installs.
+                profile.Name = "PowerShell 7";
+                profile.Location = "pwsh.exe";
+                profile.UseConPty = true;
             }
 
             return profile;
@@ -297,7 +292,7 @@ namespace FluentTerminal.App.Services.Implementation
 
         public ShellProfile GetShellProfile(Guid id)
         {
-            return NormalizeBuiltInWindowsPowerShellProfile(
+            return NormalizePlusBuiltInShellProfile(
                 _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile)));
         }
 
@@ -331,13 +326,13 @@ namespace FluentTerminal.App.Services.Implementation
             return _shellProfiles.GetAll()
                 .Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile)
-                .Select(NormalizeBuiltInWindowsPowerShellProfile)
+                .Select(NormalizePlusBuiltInShellProfile)
                 .ToList();
         }
 
         public IEnumerable<SshProfile> GetSshProfiles()
         {
-            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<SshProfile>((string)x))
+            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile).Cast<SshProfile>();
         }
 
