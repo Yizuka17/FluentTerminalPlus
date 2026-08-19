@@ -1,5 +1,6 @@
 ﻿using FluentTerminal.App.Utilities;
 using FluentTerminal.App.ViewModels;
+using FluentTerminal.App.ViewModels.Settings;
 using System;
 using System.ComponentModel;
 using System.Linq;
@@ -22,6 +23,7 @@ namespace FluentTerminal.App.Views
     public sealed partial class MainPage : Page, INotifyPropertyChanged
     {
         private CoreApplicationViewTitleBar _coreTitleBar = CoreApplication.GetCurrentView().TitleBar;
+        private readonly UISettings _uiSettings;
         private bool _windowTracked = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -52,6 +54,7 @@ namespace FluentTerminal.App.Views
         public MainPage()
         {
             InitializeComponent();
+            RequestedTheme = AppThemeManager.GetRequestedTheme();
             App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             Window.Current.SetTitleBar(TitleBar);
@@ -59,6 +62,10 @@ namespace FluentTerminal.App.Views
             DraggingHappensChanged += MainPage_DraggingHappensChanged;
             Window.Current.Activated += OnWindowActivated;
             _propertyChangedCallbackToken = RegisterPropertyChangedCallback(RequestedThemeProperty, OnRequestedThemeProperty);
+            ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+
+            _uiSettings = new UISettings();
+            _uiSettings.ColorValuesChanged += OnColorValuesChanged;
 
             ApplicationView.PreferredLaunchWindowingMode = ApplicationViewWindowingMode.Auto;
         }
@@ -66,6 +73,42 @@ namespace FluentTerminal.App.Views
         private void OnRequestedThemeProperty(DependencyObject sender, DependencyProperty dp)
         {
             ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+        }
+
+        private async void OnColorValuesChanged(UISettings sender, object args)
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, ApplyAppearanceAndPairedTheme);
+        }
+
+        private void ApplyAppearanceAndPairedTheme()
+        {
+            var requestedTheme = AppThemeManager.GetRequestedTheme();
+            if (RequestedTheme != requestedTheme)
+            {
+                RequestedTheme = requestedTheme;
+            }
+            else
+            {
+                // System mode can change while RequestedTheme remains ElementTheme.Default.
+                ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+            }
+
+            var settingsService = ViewModel?.SelectedTerminal?.SettingsService;
+            if (settingsService == null)
+            {
+                return;
+            }
+
+            var preferredThemeId = AppThemeManager.GetPreferredTerminalThemeId();
+            if (settingsService.GetTheme(preferredThemeId) == null)
+            {
+                ThemesPageViewModel.EnsureWindowsTerminalThemes(settingsService);
+            }
+
+            if (settingsService.GetTheme(preferredThemeId) != null && settingsService.GetCurrentThemeId() != preferredThemeId)
+            {
+                settingsService.SaveCurrentThemeId(preferredThemeId);
+            }
         }
 
         private async void MainPage_DraggingHappensChanged(object sender, bool e)
@@ -86,8 +129,18 @@ namespace FluentTerminal.App.Views
             {
                 ViewModel = viewModel;
                 ViewModel.Closed += ViewModel_Closed;
+                ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+                ApplyAppearanceAndPairedTheme();
             }
             base.OnNavigatedTo(e);
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedTerminal))
+            {
+                ApplyAppearanceAndPairedTheme();
+            }
         }
 
         private void ViewModel_Closed(object sender, EventArgs e)
@@ -116,9 +169,11 @@ namespace FluentTerminal.App.Views
             Loaded -= OnLoaded;
             DraggingHappensChanged -= MainPage_DraggingHappensChanged;
             Window.Current.Activated -= OnWindowActivated;
+            _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
 
             _coreTitleBar.LayoutMetricsChanged -= OnLayoutMetricsChanged;
 
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Closed -= ViewModel_Closed;
             ViewModel = null;
             Root.DataContext = null;
@@ -131,6 +186,11 @@ namespace FluentTerminal.App.Views
 
         private void OnWindowActivated(object sender, WindowActivatedEventArgs e)
         {
+            if (e.WindowActivationState != CoreWindowActivationState.Deactivated)
+            {
+                ApplyAppearanceAndPairedTheme();
+            }
+
             if (e.WindowActivationState != CoreWindowActivationState.Deactivated && TerminalContainer.Content is TerminalView terminal)
             {
                 terminal.ViewModel?.FocusTerminal();
@@ -142,6 +202,7 @@ namespace FluentTerminal.App.Views
         {
             _coreTitleBar.LayoutMetricsChanged += OnLayoutMetricsChanged;
             UpdateLayoutMetrics();
+            ApplyAppearanceAndPairedTheme();
         }
 
         private void OnLayoutMetricsChanged(CoreApplicationViewTitleBar sender, object e)
@@ -215,8 +276,8 @@ namespace FluentTerminal.App.Views
             e.AcceptedOperation = DataPackageOperation.Move;
             if (e.DragUIOverride is DragUIOverride dragUiOverride)
             {
-                dragUiOverride.IsGlyphVisible = false;
-                dragUiOverride.Caption = I18N.Translate("DropTabHere");
+                e.DragUIOverride.IsGlyphVisible = false;
+                e.DragUIOverride.Caption = I18N.Translate("DropTabHere");
             }
         }
 

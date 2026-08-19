@@ -1,10 +1,95 @@
 ﻿using Microsoft.Toolkit.Uwp.Helpers;
+using System;
+using Windows.Storage;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 
 namespace FluentTerminal.App.Utilities
 {
+    public static class AppThemeManager
+    {
+        public const string AppThemeModeKey = "AppThemeMode";
+        public const string LightTerminalThemeIdKey = "LightTerminalThemeId";
+        public const string DarkTerminalThemeIdKey = "DarkTerminalThemeId";
+
+        public static readonly Guid DefaultLightTerminalThemeId = Guid.Parse("b77e7d74-53bb-4543-9fac-c9145e0f9230");
+        public static readonly Guid DefaultDarkTerminalThemeId = Guid.Parse("8a4acdfa-9fbe-4bbc-a73d-0aef8504f6ee");
+
+        // 0 = follow system, 1 = light, 2 = dark.
+        public static int GetModeIndex()
+        {
+            var values = ApplicationData.Current.LocalSettings.Values;
+            if (values.TryGetValue(AppThemeModeKey, out var value) && value is int mode && mode >= 0 && mode <= 2)
+            {
+                return mode;
+            }
+
+            return 0;
+        }
+
+        public static void SetModeIndex(int mode)
+        {
+            if (mode < 0 || mode > 2)
+            {
+                mode = 0;
+            }
+
+            ApplicationData.Current.LocalSettings.Values[AppThemeModeKey] = mode;
+        }
+
+        public static ElementTheme GetRequestedTheme()
+        {
+            switch (GetModeIndex())
+            {
+                case 1:
+                    return ElementTheme.Light;
+                case 2:
+                    return ElementTheme.Dark;
+                default:
+                    return ElementTheme.Default;
+            }
+        }
+
+        public static Guid GetLightTerminalThemeId()
+        {
+            return GetStoredThemeId(LightTerminalThemeIdKey, DefaultLightTerminalThemeId);
+        }
+
+        public static Guid GetDarkTerminalThemeId()
+        {
+            return GetStoredThemeId(DarkTerminalThemeIdKey, DefaultDarkTerminalThemeId);
+        }
+
+        public static void SetLightTerminalThemeId(Guid id)
+        {
+            ApplicationData.Current.LocalSettings.Values[LightTerminalThemeIdKey] = id.ToString();
+        }
+
+        public static void SetDarkTerminalThemeId(Guid id)
+        {
+            ApplicationData.Current.LocalSettings.Values[DarkTerminalThemeIdKey] = id.ToString();
+        }
+
+        public static Guid GetPreferredTerminalThemeId()
+        {
+            return ContrastHelper.ResolveTheme(GetRequestedTheme()) == ElementTheme.Light
+                ? GetLightTerminalThemeId()
+                : GetDarkTerminalThemeId();
+        }
+
+        private static Guid GetStoredThemeId(string key, Guid fallback)
+        {
+            var values = ApplicationData.Current.LocalSettings.Values;
+            if (values.TryGetValue(key, out var value) && value is string text && Guid.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+
+            return fallback;
+        }
+    }
+
     public static class ContrastHelper
     {
         public static ElementTheme GetIdealThemeForBackgroundColor(string color)
@@ -24,8 +109,22 @@ namespace FluentTerminal.App.Utilities
             }
         }
 
+        public static ElementTheme ResolveTheme(ElementTheme theme)
+        {
+            if (theme != ElementTheme.Default)
+            {
+                return theme;
+            }
+
+            // ElementTheme.Default follows Windows. Resolve it only for APIs such as the
+            // native title-bar button colors that require an explicit light/dark choice.
+            var background = new UISettings().GetColorValue(UIColorType.Background);
+            return GetIdealThemeForBackgroundColor(background);
+        }
+
         public static void SetTitleBarButtonsForTheme(ElementTheme theme)
         {
+            theme = ResolveTheme(theme);
             var titleBar = ApplicationView.GetForCurrentView().TitleBar;
 
             titleBar.ButtonBackgroundColor = Colors.Transparent;
@@ -42,6 +141,7 @@ namespace FluentTerminal.App.Utilities
 
         public static Color? GetColor(string name, ElementTheme theme)
         {
+            theme = ResolveTheme(theme);
             if (theme == ElementTheme.Light)
             {
                 switch (name)

@@ -233,14 +233,15 @@ jobs:
           @"
           FluentTerminalPlus $env:RELEASE_TAG
 
-          Maintenance release for FluentTerminalPlus on Windows 10.
+          Feature release for FluentTerminalPlus on Windows 10.
 
           Highlights:
-          - Fixes the lingering background-process/tray lifetime issue when the final app window closes.
-          - Releases the UWP AppService deferral when no terminal/settings windows remain, then exits the tray when the AppService closes.
-          - Corrects FluentTerminalPlus product names, About/project/release links and package metadata left over from upstream.
-          - Improves Simplified/Traditional Chinese text for Plus-specific settings and tray actions.
-          - Keeps Windows PowerShell 5.1, PowerShell 7 / Microsoft Store PowerShell resolution, per-profile administrator launch and ConPTY behavior from v0.8.0.
+          - Adds Follow system, Light and Dark application appearance modes.
+          - Decouples the Fluent/UWP shell appearance from the active terminal background color.
+          - Adds independently selectable light and dark terminal-theme slots; Follow system switches the global terminal theme together with Windows appearance.
+          - Adds 16 paired built-in terminal schemes: Windows Terminal Default, One Half, Tango, Solarized, Gruvbox, Catppuccin, Nord and Vintage.
+          - Preserves custom themes and existing settings, while keeping per-profile terminal-theme overrides authoritative.
+          - Keeps Windows PowerShell 5.1, PowerShell 7 / Microsoft Store PowerShell resolution, per-profile administrator launch, ConPTY behavior and the v0.8.1 final-window lifetime fix.
 
           Installation:
           Extract the ZIP, trust the included FluentTerminalPlus.Release.cer certificate, then run Install.ps1 in the package folder.
