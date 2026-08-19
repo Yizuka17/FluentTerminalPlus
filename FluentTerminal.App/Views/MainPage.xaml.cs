@@ -52,6 +52,7 @@ namespace FluentTerminal.App.Views
         public MainPage()
         {
             InitializeComponent();
+            RequestedTheme = AppThemeManager.GetRequestedTheme();
             App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             Window.Current.SetTitleBar(TitleBar);
@@ -59,6 +60,7 @@ namespace FluentTerminal.App.Views
             DraggingHappensChanged += MainPage_DraggingHappensChanged;
             Window.Current.Activated += OnWindowActivated;
             _propertyChangedCallbackToken = RegisterPropertyChangedCallback(RequestedThemeProperty, OnRequestedThemeProperty);
+            ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
 
             ApplicationView.PreferredLaunchWindowingMode = ApplicationViewWindowingMode.Auto;
         }
@@ -131,6 +133,20 @@ namespace FluentTerminal.App.Views
 
         private void OnWindowActivated(object sender, WindowActivatedEventArgs e)
         {
+            if (e.WindowActivationState != CoreWindowActivationState.Deactivated)
+            {
+                var requestedTheme = AppThemeManager.GetRequestedTheme();
+                if (RequestedTheme != requestedTheme)
+                {
+                    RequestedTheme = requestedTheme;
+                }
+                else
+                {
+                    // System mode can change without the RequestedTheme value itself changing.
+                    ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+                }
+            }
+
             if (e.WindowActivationState != CoreWindowActivationState.Deactivated && TerminalContainer.Content is TerminalView terminal)
             {
                 terminal.ViewModel?.FocusTerminal();
@@ -215,8 +231,8 @@ namespace FluentTerminal.App.Views
             e.AcceptedOperation = DataPackageOperation.Move;
             if (e.DragUIOverride is DragUIOverride dragUiOverride)
             {
-                dragUiOverride.IsGlyphVisible = false;
-                dragUiOverride.Caption = I18N.Translate("DropTabHere");
+                e.DragUIOverride.IsGlyphVisible = false;
+                e.DragUIOverride.Caption = I18N.Translate("DropTabHere");
             }
         }
 
