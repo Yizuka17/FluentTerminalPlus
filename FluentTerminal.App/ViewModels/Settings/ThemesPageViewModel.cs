@@ -50,7 +50,7 @@ namespace FluentTerminal.App.ViewModels.Settings
 
             BackgroundOpacity = _settingsService.GetTerminalOptions().BackgroundOpacity;
 
-            EnsureWindowsTerminalThemes();
+            EnsureWindowsTerminalThemes(_settingsService);
 
             var activeThemeId = _settingsService.GetCurrentThemeId();
             foreach (var theme in _settingsService.GetThemes())
@@ -71,13 +71,13 @@ namespace FluentTerminal.App.ViewModels.Settings
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        private void EnsureWindowsTerminalThemes()
+        public static void EnsureWindowsTerminalThemes(ISettingsService settingsService)
         {
             foreach (var theme in GetWindowsTerminalThemes())
             {
-                if (_settingsService.GetTheme(theme.Id) == null)
+                if (settingsService.GetTheme(theme.Id) == null)
                 {
-                    _settingsService.SaveTheme(theme, true);
+                    settingsService.SaveTheme(theme, true);
                 }
             }
         }
@@ -131,6 +131,54 @@ namespace FluentTerminal.App.ViewModels.Settings
                 "#FDF6E3", "#657B83", "#002B36", "#FDF6E3",
                 "#002B36", "#DC322F", "#859900", "#B58900", "#268BD2", "#D33682", "#2AA198", "#EEE8D5",
                 "#073642", "#CB4B16", "#586E75", "#657B83", "#839496", "#6C71C4", "#93A1A1", "#FDF6E3");
+
+            yield return CreateTheme(
+                "65ee7f6d-125a-4d8d-a56e-bfd9f40a7ea0", "Gruvbox Dark",
+                "#282828", "#EBDBB2", "#EBDBB2", "#282828",
+                "#282828", "#CC241D", "#98971A", "#D79921", "#458588", "#B16286", "#689D6A", "#A89984",
+                "#928374", "#FB4934", "#B8BB26", "#FABD2F", "#83A598", "#D3869B", "#8EC07C", "#EBDBB2");
+
+            yield return CreateTheme(
+                "f16c8fd8-e067-498b-a57c-6b331455cf87", "Gruvbox Light",
+                "#FBF1C7", "#3C3836", "#3C3836", "#FBF1C7",
+                "#282828", "#CC241D", "#98971A", "#D79921", "#458588", "#B16286", "#689D6A", "#A89984",
+                "#928374", "#9D0006", "#79740E", "#B57614", "#076678", "#8F3F71", "#427B58", "#3C3836");
+
+            yield return CreateTheme(
+                "a01bceef-3596-41b2-b5d8-329959e9f93b", "Catppuccin Mocha Dark",
+                "#1E1E2E", "#CDD6F4", "#F5E0DC", "#1E1E2E",
+                "#45475A", "#F38BA8", "#A6E3A1", "#F9E2AF", "#89B4FA", "#F5C2E7", "#94E2D5", "#BAC2DE",
+                "#585B70", "#F38BA8", "#A6E3A1", "#F9E2AF", "#89B4FA", "#F5C2E7", "#94E2D5", "#A6ADC8");
+
+            yield return CreateTheme(
+                "ab647e1e-03f4-4d29-9b45-8e0a97a86c78", "Catppuccin Latte Light",
+                "#EFF1F5", "#4C4F69", "#DC8A78", "#EFF1F5",
+                "#5C5F77", "#D20F39", "#40A02B", "#DF8E1D", "#1E66F5", "#EA76CB", "#179299", "#ACB0BE",
+                "#6C6F85", "#D20F39", "#40A02B", "#DF8E1D", "#1E66F5", "#EA76CB", "#179299", "#4C4F69");
+
+            yield return CreateTheme(
+                "06ed31c1-b9d2-4e45-a149-c7154e2587de", "Nord Dark",
+                "#2E3440", "#D8DEE9", "#D8DEE9", "#2E3440",
+                "#3B4252", "#BF616A", "#A3BE8C", "#EBCB8B", "#81A1C1", "#B48EAD", "#88C0D0", "#E5E9F0",
+                "#4C566A", "#BF616A", "#A3BE8C", "#EBCB8B", "#5E81AC", "#B48EAD", "#8FBCBB", "#ECEFF4");
+
+            yield return CreateTheme(
+                "e6b8c0d3-4496-4760-98f9-50ad5d452b2e", "Nord Snow Light",
+                "#ECEFF4", "#2E3440", "#2E3440", "#ECEFF4",
+                "#3B4252", "#BF616A", "#A3BE8C", "#EBCB8B", "#5E81AC", "#B48EAD", "#8FBCBB", "#D8DEE9",
+                "#4C566A", "#BF616A", "#A3BE8C", "#EBCB8B", "#81A1C1", "#B48EAD", "#88C0D0", "#2E3440");
+
+            yield return CreateTheme(
+                "fa2adf51-e244-41d8-9df5-8790ea320974", "Vintage Dark",
+                "#000000", "#C0C0C0", "#FFFFFF", "#000000",
+                "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#C0C0C0",
+                "#808080", "#FF0000", "#00FF00", "#FFFF00", "#0000FF", "#FF00FF", "#00FFFF", "#FFFFFF");
+
+            yield return CreateTheme(
+                "b2508e31-e15c-4eaf-8fdf-384deee7a2c4", "Vintage Light",
+                "#FFFFFF", "#000000", "#000000", "#FFFFFF",
+                "#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#C0C0C0",
+                "#808080", "#FF0000", "#00FF00", "#FFFF00", "#0000FF", "#FF00FF", "#00FFFF", "#FFFFFF");
         }
 
         private static TerminalTheme CreateTheme(
@@ -160,7 +208,7 @@ namespace FluentTerminal.App.ViewModels.Settings
             return new TerminalTheme
             {
                 Id = Guid.Parse(id),
-                Author = "Microsoft Windows Terminal / FluentTerminalPlus",
+                Author = "Windows Terminal inspired / FluentTerminalPlus",
                 Name = name,
                 PreInstalled = true,
                 Colors = new TerminalColors
