@@ -12,16 +12,17 @@ namespace FluentTerminal.SystemTray
 {
     public class SystemTrayApplicationContext : ApplicationContext
     {
-        private const int FrontendLifetimePollIntervalMs = 1000;
-        private const int InitialGracePeriodTicks = 8;
-        private const int ConsecutiveZeroWindowTicksBeforeExit = 2;
+        private const string FrontendProcessName = "FluentTerminal.App";
+        private const int FrontendLifetimePollIntervalMs = 500;
+        private const int InitialGracePeriodTicks = 10;
+        private const int ConsecutiveNoVisibleWindowTicksBeforeExit = 2;
 
         private readonly NotifyIcon _notifyIcon;
         private readonly Timer _frontendLifetimeTimer;
         private bool _trayIconDisposed;
-        private bool _hasSeenFrontendWindow;
+        private bool _hasSeenVisibleFrontendWindow;
         private int _lifetimePollCount;
-        private int _consecutiveZeroWindowTicks;
+        private int _consecutiveNoVisibleWindowTicks;
 
         public SystemTrayApplicationContext()
         {
@@ -77,36 +78,41 @@ namespace FluentTerminal.SystemTray
             if (!exitWhenNoWindows)
             {
                 _lifetimePollCount = 0;
-                _consecutiveZeroWindowTicks = 0;
-                _hasSeenFrontendWindow = false;
+                _consecutiveNoVisibleWindowTicks = 0;
+                _hasSeenVisibleFrontendWindow = false;
                 return;
             }
 
             _lifetimePollCount++;
 
-            var windowCount = 0;
-            if (values.TryGetValue(Constants.ActiveFrontendWindowCountKey, out var countValue) &&
-                countValue is int count)
+            bool hasVisibleFrontendWindow;
+            try
             {
-                windowCount = Math.Max(0, count);
+                hasVisibleFrontendWindow = ProcessUtils.HasVisibleWindowForProcessName(FrontendProcessName);
             }
-
-            if (windowCount > 0)
+            catch (Exception e)
             {
-                _hasSeenFrontendWindow = true;
-                _consecutiveZeroWindowTicks = 0;
+                Logger.Instance.Debug("Failed to inspect FluentTerminalPlus frontend windows. Exception: {0}", e);
+                _consecutiveNoVisibleWindowTicks = 0;
                 return;
             }
 
-            // The full-trust helper can start before the first UWP page is constructed.
-            // Give the frontend time to publish its initial window count before treating zero as final.
-            if (!_hasSeenFrontendWindow && _lifetimePollCount < InitialGracePeriodTicks)
+            if (hasVisibleFrontendWindow)
+            {
+                _hasSeenVisibleFrontendWindow = true;
+                _consecutiveNoVisibleWindowTicks = 0;
+                return;
+            }
+
+            // The full-trust helper can start before the first UWP frame/CoreWindow is visible.
+            // Give activation a short grace period so startup cannot kill the helper prematurely.
+            if (!_hasSeenVisibleFrontendWindow && _lifetimePollCount < InitialGracePeriodTicks)
             {
                 return;
             }
 
-            _consecutiveZeroWindowTicks++;
-            if (_consecutiveZeroWindowTicks < ConsecutiveZeroWindowTicksBeforeExit)
+            _consecutiveNoVisibleWindowTicks++;
+            if (_consecutiveNoVisibleWindowTicks < ConsecutiveNoVisibleWindowTicksBeforeExit)
             {
                 return;
             }
