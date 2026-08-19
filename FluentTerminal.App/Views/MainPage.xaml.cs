@@ -260,7 +260,7 @@ namespace FluentTerminal.App.Views
         }
 
         public static readonly DependencyProperty DraggingHappensProperty =
-            DependencyProperty.Register(nameof(DraggingHappensProperty), typeof(bool), typeof(MainPage), new PropertyMetadata(null));
+            DependencyProperty.Register(nameof(DraggingHappens), typeof(bool), typeof(MainPage), new PropertyMetadata(null));
 
         public bool DraggingHappens
         {
