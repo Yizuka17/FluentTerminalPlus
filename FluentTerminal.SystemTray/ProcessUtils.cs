@@ -24,10 +24,11 @@ namespace FluentTerminal.SystemTray
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         /// <summary>
-        /// Returns true when at least one visible top-level window, or a visible child of a
-        /// visible top-level window, belongs to a process with the supplied executable name.
-        /// The child-window check matters for Windows 10 UWP apps whose frame can be hosted
-        /// by ApplicationFrameHost.exe while the CoreWindow still belongs to the UWP process.
+        /// Returns true when at least one visible top-level window belongs to the supplied
+        /// process, or when a visible top-level host contains a child window owned by it.
+        /// Windows 10 UWP frames can be owned by ApplicationFrameHost.exe while the child
+        /// CoreWindow still belongs to the UWP process, and that child is not guaranteed to
+        /// report WS_VISIBLE independently of its host frame.
         /// </summary>
         public static bool HasVisibleWindowForProcessName(string processName)
         {
@@ -66,11 +67,6 @@ namespace FluentTerminal.SystemTray
 
                 EnumChildWindows(topLevelWindow, (childWindow, __) =>
                 {
-                    if (!IsWindowVisible(childWindow))
-                    {
-                        return true;
-                    }
-
                     GetWindowThreadProcessId(childWindow, out var childProcessId);
                     if (!processIds.Contains(childProcessId))
                     {
