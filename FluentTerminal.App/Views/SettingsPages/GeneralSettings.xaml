@@ -78,6 +78,12 @@
                         Visibility="{x:Bind ViewModel.ShouldRestartForTrayMessage, Mode=OneWay, Converter={StaticResource TrueToVisibleConverter}}" />
                 </StackPanel>
 
+                <ToggleSwitch
+                    x:Name="ExitTrayWhenLastWindowClosedToggle"
+                    Margin="{StaticResource ItemMargin}"
+                    Header="Exit tray process when all windows are closed"
+                    Toggled="ExitTrayWhenLastWindowClosed_Toggled" />
+
                 <StackPanel Margin="{StaticResource ItemMargin}">
                     <TextBlock
                         x:Uid="OpenNewTerminalAs"

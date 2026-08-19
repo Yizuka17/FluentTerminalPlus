@@ -30,11 +30,8 @@ jobs:
         shell: pwsh
         working-directory: ./FluentTerminal.Client
         run: |
-          # This project commits package-lock.json but no yarn.lock. Using yarn would resolve
-          # today's transitive dependencies against an old TypeScript compiler and is not reproducible.
           npm ci 2>&1 | Tee-Object -FilePath ..\client-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
           npm run build 2>&1 | Tee-Object -FilePath ..\client-build.log -Append
           exit $LASTEXITCODE
 
@@ -45,9 +42,6 @@ jobs:
         id: msbuild
         shell: pwsh
         run: |
-          # GitHub's current windows-latest image no longer carries the old 19041 SDK that
-          # Fluent Terminal originally targeted. Compile against the newest installed UAP SDK
-          # while keeping each project's TargetPlatformMinVersion unchanged for Windows 10.
           $uapSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Platforms\UAP'
           $sdkVersion = Get-ChildItem -Path $uapSdkRoot -Directory -ErrorAction Stop |
             Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
@@ -60,9 +54,6 @@ jobs:
 
           Write-Host "Building against Windows SDK $sdkVersion"
 
-          # The UWP project hard-codes the Windows Desktop Extension SDK at 19041. MSBuild's
-          # TargetPlatformVersion property does not retarget SDKReference items, so patch only this
-          # generated build workspace copy to the SDK that actually exists on the runner.
           $appProject = 'FluentTerminal.App\FluentTerminal.App.csproj'
           $projectText = Get-Content $appProject -Raw
           $oldDesktopSdk = 'WindowsDesktop, Version=10.0.19041.0'
@@ -73,9 +64,6 @@ jobs:
           $projectText = $projectText.Replace($oldDesktopSdk, $newDesktopSdk)
           [System.IO.File]::WriteAllText((Resolve-Path $appProject), $projectText, [System.Text.UTF8Encoding]::new($true))
 
-          # Do not use or publish upstream Fluent Terminal's expired development certificate.
-          # Create an ephemeral code-signing key for this runner. Only the public CER is retained
-          # in the build artifact so a tester can explicitly trust it before sideloading the bundle.
           $certSubject = 'CN=Yizuka17.FluentTerminalPlus'
           $certificate = New-SelfSignedCertificate `
             -Type Custom `
@@ -88,7 +76,7 @@ jobs:
             -KeyUsage DigitalSignature `
             -KeyExportPolicy Exportable `
             -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') `
-            -NotAfter (Get-Date).AddYears(2)
+            -NotAfter (Get-Date).AddYears(10)
 
           $pfxPasswordText = [Guid]::NewGuid().ToString('N')
           $pfxPassword = ConvertTo-SecureString $pfxPasswordText -AsPlainText -Force
@@ -97,9 +85,6 @@ jobs:
           Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
           Export-Certificate -Cert $certificate -FilePath $cerPath | Out-Null
 
-          # Remove stale upstream Store/certificate items from the runner's workspace copy. The source
-          # Store association is already gone; this also prevents the old public PFX from being treated
-          # as packaging content by the legacy WAP project.
           $packageProject = 'FluentTerminal.Package\FluentTerminal.Package.wapproj'
           $packageText = Get-Content $packageProject -Raw
           $packageText = $packageText -replace '(?m)^\s*<PackageCertificateKeyFile>.*?</PackageCertificateKeyFile>\s*\r?\n', ''
@@ -107,8 +92,6 @@ jobs:
           $packageText = $packageText -replace '(?m)^\s*<None Include="Package\.StoreAssociation\.xml" />\s*\r?\n', ''
           [System.IO.File]::WriteAllText((Resolve-Path $packageProject), $packageText, [System.Text.UTF8Encoding]::new($true))
 
-          # This legacy solution builds SystemTray both directly and through the packaging project.
-          # Parallel MSBuild nodes race on the same obj/resource files, so keep the graph serialized.
           msbuild FluentTerminal.sln `
             -t:build `
             -p:Configuration=Debug `

@@ -11,5 +11,6 @@
         public const string MoshCommandName = "mosh";
         public const string ExecutedCommandsContainerName = "HistoryContainer";
         public const string TerminalViewModelStateId = "TerminalViewModelState";
+        public const string ExitTrayWhenLastWindowClosedKey = "ExitTrayWhenLastWindowClosed";
     }
 }

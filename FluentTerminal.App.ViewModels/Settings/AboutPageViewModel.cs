@@ -8,7 +8,7 @@ namespace FluentTerminal.App.ViewModels.Settings
 {
     public class AboutPageViewModel : ObservableObject
     {
-        private const string BaseUrl = "https://github.com/felixse/FluentTerminal/releases/tag/";
+        private const string ReleasesUrl = "https://github.com/Yizuka17/FluentTerminalPlus/releases";
         private readonly IUpdateService _updateService;
         private string _latestVersion;
         private readonly IApplicationView _applicationView;
@@ -32,7 +32,7 @@ namespace FluentTerminal.App.ViewModels.Settings
             }
         }
 
-        public string CurrentVersionReleaseNotesURL => BaseUrl + CurrentVersion;
+        public string CurrentVersionReleaseNotesURL => ReleasesUrl;
 
         public string LatestVersion
         {
@@ -55,7 +55,7 @@ namespace FluentTerminal.App.ViewModels.Settings
 
         public bool LatestVersionNotFound => LatestVersion == "0.0.0.0";
 
-        public string LatestVersionReleaseNotesURL => BaseUrl + LatestVersion;
+        public string LatestVersionReleaseNotesURL => ReleasesUrl;
 
         public Task OnNavigatedTo()
         {

@@ -8,7 +8,8 @@ namespace FluentTerminal.App.Services.Implementation
 {
     public class UpdateService : IUpdateService
     {
-        private const string apiEndpoint = "https://api.github.com";
+        private const string ApiEndpoint = "https://api.github.com";
+        private const string ReleasesUrl = "https://github.com/Yizuka17/FluentTerminalPlus/releases";
 
         private readonly INotificationService _notificationService;
 
@@ -23,7 +24,7 @@ namespace FluentTerminal.App.Services.Implementation
             if (latest > GetCurrentVersion())
             {
                 _notificationService.ShowNotification("Update available",
-                    "Click to open the releases page.", "https://github.com/felixse/FluentTerminal/releases");
+                    "Click to open the releases page.", ReleasesUrl);
             }
             else if (notifyNoUpdate)
             {
@@ -39,16 +40,29 @@ namespace FluentTerminal.App.Services.Implementation
 
         public async Task<Version> GetLatestVersionAsync()
         {
-            var restClient = new RestClient(apiEndpoint);
-            var restRequest = new RestRequest("/repos/felixse/fluentterminal/releases", Method.Get);
+            var restClient = new RestClient(ApiEndpoint);
+            var restRequest = new RestRequest("/repos/Yizuka17/FluentTerminalPlus/releases", Method.Get);
 
             var restResponse = await restClient.ExecuteAsync(restRequest).ConfigureAwait(false);
             if (restResponse.IsSuccessful)
             {
                 dynamic restResponseData = JsonConvert.DeserializeObject(restResponse.Content);
-                string tag = restResponseData[0].tag_name;
-                var latestVersion = new Version(tag);
-                return new Version(latestVersion.Major, latestVersion.Minor, latestVersion.Build, latestVersion.Revision);
+                if (restResponseData != null && restResponseData.Count > 0)
+                {
+                    string tag = restResponseData[0].tag_name;
+                    if (!string.IsNullOrWhiteSpace(tag))
+                    {
+                        tag = tag.TrimStart('v', 'V');
+                        if (Version.TryParse(tag, out var latestVersion))
+                        {
+                            return new Version(
+                                latestVersion.Major,
+                                latestVersion.Minor,
+                                Math.Max(0, latestVersion.Build),
+                                Math.Max(0, latestVersion.Revision));
+                        }
+                    }
+                }
             }
             return new Version(0, 0, 0, 0);
         }

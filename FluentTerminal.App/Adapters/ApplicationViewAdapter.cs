@@ -16,6 +16,7 @@ namespace FluentTerminal.App.Adapters
         private readonly ApplicationView _applicationView;
         private readonly CoreDispatcher _dispatcher;
         private bool _closed;
+        private bool _lifecycleClosed;
 
         public event CloseRequestedHandler CloseRequested;
         public event EventHandler Closed;
@@ -26,6 +27,7 @@ namespace FluentTerminal.App.Adapters
             _applicationView.Consolidated += _applicationView_Consolidated;
             _dispatcher = CoreApplication.GetCurrentView().Dispatcher;
             SystemNavigationManagerPreview.GetForCurrentView().CloseRequested += OnCloseRequested;
+            App.NotifyTrackedWindowCreated();
 
             Logger.Instance.Debug("Created ApplicationViewAdapter for ApplicationView with Id: {Id}", _applicationView.Id);
         }
@@ -34,6 +36,12 @@ namespace FluentTerminal.App.Adapters
         {
             _applicationView.Consolidated -= _applicationView_Consolidated;
             Closed?.Invoke(this, EventArgs.Empty);
+
+            if (!_lifecycleClosed)
+            {
+                _lifecycleClosed = true;
+                App.NotifyTrackedWindowClosed();
+            }
         }
 
         public int Id => _applicationView.Id;
