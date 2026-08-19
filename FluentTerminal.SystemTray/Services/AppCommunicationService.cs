@@ -13,6 +13,7 @@ using FluentTerminal.Models.Responses;
 using FluentTerminal.App.Services;
 using System.Windows.Forms;
 using Windows.Foundation;
+using Windows.Storage;
 
 namespace FluentTerminal.SystemTray.Services
 {
@@ -80,10 +81,25 @@ namespace FluentTerminal.SystemTray.Services
 
         private void OnServiceClosed(AppServiceConnection sender, AppServiceClosedEventArgs args)
         {
-            _appServiceConnection.RequestReceived -= OnRequestReceived;
-            _appServiceConnection.ServiceClosed -= OnServiceClosed;
+            sender.RequestReceived -= OnRequestReceived;
+            sender.ServiceClosed -= OnServiceClosed;
+
+            if (!ReferenceEquals(_appServiceConnection, sender))
+            {
+                return;
+            }
 
             _appServiceConnection = null;
+
+            var values = ApplicationData.Current.LocalSettings.Values;
+            var exitTray = values.TryGetValue(Constants.ExitTrayWhenLastWindowClosedKey, out var value) &&
+                           value is bool enabled && enabled;
+
+            if (exitTray)
+            {
+                Logger.Instance.Debug("FluentTerminalPlus AppService closed; exiting tray process because the last-window exit option is enabled.");
+                Application.Exit();
+            }
         }
 
         private async void OnRequestReceived(AppServiceConnection sender, AppServiceRequestReceivedEventArgs args)
