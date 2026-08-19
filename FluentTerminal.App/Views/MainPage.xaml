@@ -7,7 +7,6 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="using:FluentTerminal.App.Views"
     KeyDown="MainPage_OnKeyDown"
-    RequestedTheme="{x:Bind ViewModel.SelectedTerminal.TerminalTheme.Colors.Background, Mode=OneWay, Converter={StaticResource BackgroundToApplicationThemeConverter}}"
     mc:Ignorable="d">
     <Page.Background>
         <SolidColorBrush Color="{ThemeResource SystemAccentColor}" />
