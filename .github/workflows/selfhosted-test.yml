@@ -1,0 +1,122 @@
+name: Self-hosted Runner Test
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Runner info
+        shell: pwsh
+        run: |
+          Write-Host "Computer: $env:COMPUTERNAME"
+          Write-Host "User: $env:USERNAME"
+          Write-Host "Runner temp: $env:RUNNER_TEMP"
+          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+
+      - name: Check Node and npm
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Check build environment
+        shell: pwsh
+        run: |
+          msbuild -version
+
+          $uapSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Platforms\UAP'
+          if (-not (Test-Path $uapSdkRoot)) {
+            throw "UAP SDK root not found: $uapSdkRoot"
+          }
+
+          $sdkVersions = Get-ChildItem -Path $uapSdkRoot -Directory -ErrorAction Stop |
+            Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -ExpandProperty Name
+
+          if (-not $sdkVersions) {
+            throw 'No UAP Windows SDK versions found.'
+          }
+
+          Write-Host 'Installed UAP SDKs:'
+          $sdkVersions | ForEach-Object { Write-Host "  $_" }
+
+      - name: Build client
+        shell: pwsh
+        working-directory: ./FluentTerminal.Client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Restore and build x64 Debug
+        shell: pwsh
+        run: |
+          $uapSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Platforms\UAP'
+          $sdkVersion = Get-ChildItem -Path $uapSdkRoot -Directory -ErrorAction Stop |
+            Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1 -ExpandProperty Name
+
+          Write-Host "Building against Windows SDK $sdkVersion"
+
+          $appProject = 'FluentTerminal.App\FluentTerminal.App.csproj'
+          $projectText = Get-Content $appProject -Raw
+          $oldDesktopSdk = 'WindowsDesktop, Version=10.0.19041.0'
+          $newDesktopSdk = "WindowsDesktop, Version=$sdkVersion"
+          if (-not $projectText.Contains($oldDesktopSdk)) {
+            throw "Expected WindowsDesktop 19041 SDKReference was not found in $appProject"
+          }
+          $projectText = $projectText.Replace($oldDesktopSdk, $newDesktopSdk)
+          [System.IO.File]::WriteAllText((Resolve-Path $appProject), $projectText, [System.Text.UTF8Encoding]::new($true))
+
+          $certSubject = 'CN=Yizuka17.FluentTerminalPlus'
+          $certificate = New-SelfSignedCertificate `
+            -Type Custom `
+            -Subject $certSubject `
+            -FriendlyName 'FluentTerminalPlus Self-hosted Test' `
+            -CertStoreLocation 'Cert:\CurrentUser\My' `
+            -KeyAlgorithm RSA `
+            -KeyLength 2048 `
+            -HashAlgorithm SHA256 `
+            -KeyUsage DigitalSignature `
+            -KeyExportPolicy Exportable `
+            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') `
+            -NotAfter (Get-Date).AddYears(1)
+
+          $pfxPasswordText = [Guid]::NewGuid().ToString('N')
+          $pfxPassword = ConvertTo-SecureString $pfxPasswordText -AsPlainText -Force
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'FluentTerminalPlus.SelfHostedTest.pfx'
+          Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
+
+          $packageProject = 'FluentTerminal.Package\FluentTerminal.Package.wapproj'
+          $packageText = Get-Content $packageProject -Raw
+          $packageText = $packageText -replace '(?m)^\s*<PackageCertificateKeyFile>.*?</PackageCertificateKeyFile>\s*\r?\n', ''
+          $packageText = $packageText -replace '(?m)^\s*<Content Include="FluentTerminal\.App_StoreKey\.pfx" />\s*\r?\n', ''
+          $packageText = $packageText -replace '(?m)^\s*<None Include="Package\.StoreAssociation\.xml" />\s*\r?\n', ''
+          [System.IO.File]::WriteAllText((Resolve-Path $packageProject), $packageText, [System.Text.UTF8Encoding]::new($true))
+
+          msbuild FluentTerminal.sln `
+            -t:build `
+            -p:Configuration=Debug `
+            -p:Platform=x64 `
+            "-p:TargetPlatformVersion=$sdkVersion" `
+            "-p:PackageCertificateKeyFile=$pfxPath" `
+            "-p:PackageCertificatePassword=$pfxPasswordText" `
+            -p:AppxPackageSigningEnabled=true `
+            -m:1 `
+            -restore
