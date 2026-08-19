@@ -1,10 +1,12 @@
 ﻿using FluentTerminal.App.Services;
 using FluentTerminal.App.Services.Utilities;
+using FluentTerminal.App.Utilities;
 using FluentTerminal.Models;
 using FluentTerminal.Models.Enums;
 using Microsoft.Toolkit.Mvvm.ComponentModel;
 using Microsoft.Toolkit.Mvvm.Input;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 
@@ -25,6 +27,9 @@ namespace FluentTerminal.App.ViewModels.Settings
         private readonly IApplicationLanguageService _applicationLanguageService;
         private readonly ITrayProcessCommunicationService _trayProcessCommunicationService;
         private readonly IFileSystemService _fileSystemService;
+        private readonly IReadOnlyList<TerminalTheme> _themeChoices;
+        private TerminalTheme _selectedLightTheme;
+        private TerminalTheme _selectedDarkTheme;
 
         public GeneralPageViewModel(ISettingsService settingsService, IDialogService dialogService, IDefaultValueProvider defaultValueProvider,
             IStartupTaskService startupTaskService, IApplicationLanguageService applicationLanguageService,
@@ -40,11 +45,55 @@ namespace FluentTerminal.App.ViewModels.Settings
 
             _applicationSettings = _settingsService.GetApplicationSettings();
 
+            ThemesPageViewModel.EnsureWindowsTerminalThemes(_settingsService);
+            _themeChoices = _settingsService.GetThemes().OrderBy(theme => theme.Name).ToList();
+            _selectedLightTheme = _themeChoices.FirstOrDefault(theme => theme.Id == AppThemeManager.GetLightTerminalThemeId())
+                                  ?? _themeChoices.FirstOrDefault();
+            _selectedDarkTheme = _themeChoices.FirstOrDefault(theme => theme.Id == AppThemeManager.GetDarkTerminalThemeId())
+                                 ?? _themeChoices.FirstOrDefault();
+
             RestoreDefaultsCommand = new AsyncRelayCommand(RestoreDefaultsAsync);
             BrowseLogDirectoryCommand = new AsyncRelayCommand(BrowseLogDirectoryAsync);
         }
 
         public IEnumerable<string> Languages => _applicationLanguageService.Languages;
+
+        public IReadOnlyList<TerminalTheme> ThemeChoices => _themeChoices;
+
+        public TerminalTheme SelectedLightTheme
+        {
+            get => _selectedLightTheme;
+            set
+            {
+                if (value != null && SetProperty(ref _selectedLightTheme, value))
+                {
+                    AppThemeManager.SetLightTerminalThemeId(value.Id);
+                    ApplyPreferredTerminalTheme();
+                }
+            }
+        }
+
+        public TerminalTheme SelectedDarkTheme
+        {
+            get => _selectedDarkTheme;
+            set
+            {
+                if (value != null && SetProperty(ref _selectedDarkTheme, value))
+                {
+                    AppThemeManager.SetDarkTerminalThemeId(value.Id);
+                    ApplyPreferredTerminalTheme();
+                }
+            }
+        }
+
+        public void ApplyPreferredTerminalTheme()
+        {
+            var themeId = AppThemeManager.GetPreferredTerminalThemeId();
+            if (_settingsService.GetTheme(themeId) != null && _settingsService.GetCurrentThemeId() != themeId)
+            {
+                _settingsService.SaveCurrentThemeId(themeId);
+            }
+        }
 
         public bool NeedsToRestart
         {
