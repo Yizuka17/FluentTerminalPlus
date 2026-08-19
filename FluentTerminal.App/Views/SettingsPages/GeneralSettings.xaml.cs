@@ -31,6 +31,7 @@ namespace FluentTerminal.App.Views.SettingsPages
                 ViewModel = viewModel;
                 LoadExitTrayWhenLastWindowClosedSetting();
                 LoadAppThemeSetting();
+                ViewModel.ApplyPreferredTerminalTheme();
                 // ReSharper disable once AssignmentIsFullyDiscarded
                 _ = ViewModel.OnNavigatedToAsync();
             }
@@ -52,6 +53,7 @@ namespace FluentTerminal.App.Views.SettingsPages
 
             AppThemeManager.SetModeIndex(AppThemeComboBox.SelectedIndex);
             var requestedTheme = AppThemeManager.GetRequestedTheme();
+            ViewModel?.ApplyPreferredTerminalTheme();
 
             if (Window.Current.Content is Frame frame && frame.Content is FluentTerminal.App.Views.SettingsPage settingsPage)
             {
@@ -121,6 +123,16 @@ namespace FluentTerminal.App.Views.SettingsPages
             "Dark",
             "深色",
             "深色");
+
+        public string LightTerminalTheme => Localize(
+            "Light terminal theme",
+            "浅色终端主题",
+            "淺色終端主題");
+
+        public string DarkTerminalTheme => Localize(
+            "Dark terminal theme",
+            "深色终端主题",
+            "深色終端主題");
 
         private static string Localize(string english, string simplifiedChinese, string traditionalChinese)
         {
