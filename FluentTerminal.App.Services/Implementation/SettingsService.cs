@@ -332,7 +332,7 @@ namespace FluentTerminal.App.Services.Implementation
 
         public IEnumerable<SshProfile> GetSshProfiles()
         {
-            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
+            return _sshProfiles.GetAll().Select(x => JsonConvert.DeserializeObject<SshProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile).Cast<SshProfile>();
         }
 
