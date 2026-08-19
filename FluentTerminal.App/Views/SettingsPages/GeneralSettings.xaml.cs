@@ -2,8 +2,10 @@
 using FluentTerminal.App.Services.Utilities;
 using FluentTerminal.App.ViewModels.Settings;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Globalization;
 using Windows.Storage;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -54,6 +56,35 @@ namespace FluentTerminal.App.Views.SettingsPages
 
             ApplicationData.Current.LocalSettings.Values[Constants.ExitTrayWhenLastWindowClosedKey] =
                 ExitTrayWhenLastWindowClosedToggle.IsOn;
+        }
+    }
+
+    public sealed class PlusLocalizedStrings
+    {
+        public string ExitTrayWhenAllWindowsClosed => Localize(
+            "Exit tray process when all windows are closed",
+            "关闭所有窗口时退出托盘进程",
+            "關閉所有視窗時結束系統匣程序");
+
+        public string RunAsAdministrator => Localize(
+            "Run as administrator",
+            "以管理员身份运行",
+            "以系統管理員身分執行");
+
+        private static string Localize(string english, string simplifiedChinese, string traditionalChinese)
+        {
+            var language = ApplicationLanguages.Languages.FirstOrDefault() ?? "en-US";
+            if (language.StartsWith("zh-Hant", StringComparison.OrdinalIgnoreCase) ||
+                language.StartsWith("zh-TW", StringComparison.OrdinalIgnoreCase) ||
+                language.StartsWith("zh-HK", StringComparison.OrdinalIgnoreCase) ||
+                language.StartsWith("zh-MO", StringComparison.OrdinalIgnoreCase))
+            {
+                return traditionalChinese;
+            }
+
+            return language.StartsWith("zh", StringComparison.OrdinalIgnoreCase)
+                ? simplifiedChinese
+                : english;
         }
     }
 }
