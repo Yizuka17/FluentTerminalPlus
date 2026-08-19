@@ -56,6 +56,19 @@
                         Foreground="Red"
                         Visibility="{x:Bind ViewModel.NeedsToRestart, Mode=OneWay, Converter={StaticResource TrueToVisibleConverter}}" />
                 </StackPanel>
+
+                <StackPanel Margin="{StaticResource ItemMargin}">
+                    <ComboBox
+                        x:Name="AppThemeComboBox"
+                        Width="200"
+                        Header="{Binding Appearance, Source={StaticResource PlusStrings}}"
+                        SelectionChanged="AppThemeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="{Binding ThemeSystem, Source={StaticResource PlusStrings}}" />
+                        <ComboBoxItem Content="{Binding ThemeLight, Source={StaticResource PlusStrings}}" />
+                        <ComboBoxItem Content="{Binding ThemeDark, Source={StaticResource PlusStrings}}" />
+                    </ComboBox>
+                </StackPanel>
+
                 <StackPanel Margin="{StaticResource ItemMargin}">
                     <ToggleSwitch
                         x:Uid="RunOnStartup"
