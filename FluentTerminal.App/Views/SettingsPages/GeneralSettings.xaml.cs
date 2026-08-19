@@ -1,5 +1,6 @@
 ﻿using FluentTerminal.App.Services;
 using FluentTerminal.App.Services.Utilities;
+using FluentTerminal.App.Utilities;
 using FluentTerminal.App.ViewModels.Settings;
 using System;
 using System.Linq;
@@ -14,6 +15,7 @@ namespace FluentTerminal.App.Views.SettingsPages
     public sealed partial class GeneralSettings : Page
     {
         private bool _loadingExitTrayWhenLastWindowClosed;
+        private bool _loadingAppTheme;
 
         public GeneralPageViewModel ViewModel { get; private set; }
 
@@ -28,9 +30,40 @@ namespace FluentTerminal.App.Views.SettingsPages
             {
                 ViewModel = viewModel;
                 LoadExitTrayWhenLastWindowClosedSetting();
+                LoadAppThemeSetting();
                 // ReSharper disable once AssignmentIsFullyDiscarded
                 _ = ViewModel.OnNavigatedToAsync();
             }
+        }
+
+        private void LoadAppThemeSetting()
+        {
+            _loadingAppTheme = true;
+            AppThemeComboBox.SelectedIndex = AppThemeManager.GetModeIndex();
+            _loadingAppTheme = false;
+        }
+
+        private void AppThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingAppTheme || AppThemeComboBox.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            AppThemeManager.SetModeIndex(AppThemeComboBox.SelectedIndex);
+            var requestedTheme = AppThemeManager.GetRequestedTheme();
+
+            if (Window.Current.Content is Frame frame && frame.Content is FluentTerminal.App.Views.SettingsPage settingsPage)
+            {
+                settingsPage.RequestedTheme = requestedTheme;
+            }
+            else if (Window.Current.Content is FluentTerminal.App.Views.SettingsPage directSettingsPage)
+            {
+                directSettingsPage.RequestedTheme = requestedTheme;
+            }
+
+            RequestedTheme = requestedTheme;
+            ContrastHelper.SetTitleBarButtonsForTheme(requestedTheme);
         }
 
         private void LoadExitTrayWhenLastWindowClosedSetting()
@@ -68,6 +101,26 @@ namespace FluentTerminal.App.Views.SettingsPages
             "Run as administrator",
             "以管理员身份运行",
             "以系統管理員身分執行");
+
+        public string Appearance => Localize(
+            "Appearance",
+            "外观",
+            "外觀");
+
+        public string ThemeSystem => Localize(
+            "Use system setting",
+            "跟随系统",
+            "跟隨系統");
+
+        public string ThemeLight => Localize(
+            "Light",
+            "浅色",
+            "淺色");
+
+        public string ThemeDark => Localize(
+            "Dark",
+            "深色",
+            "深色");
 
         private static string Localize(string english, string simplifiedChinese, string traditionalChinese)
         {
