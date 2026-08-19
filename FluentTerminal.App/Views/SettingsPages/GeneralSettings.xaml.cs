@@ -4,7 +4,6 @@ using FluentTerminal.App.ViewModels.Settings;
 using System;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Windows.Globalization;
 using Windows.Storage;
 using Windows.UI.Xaml;
@@ -97,41 +96,25 @@ namespace FluentTerminal.App
 
         internal static void NotifyTrackedWindowCreated()
         {
-            Interlocked.Increment(ref _trackedWindowCount);
+            var count = Interlocked.Increment(ref _trackedWindowCount);
+            PublishTrackedWindowCount(count);
         }
 
         internal static void NotifyTrackedWindowClosed()
         {
             var remaining = Interlocked.Decrement(ref _trackedWindowCount);
-            if (remaining > 0)
+            if (remaining < 0)
             {
-                return;
+                Interlocked.Exchange(ref _trackedWindowCount, 0);
+                remaining = 0;
             }
 
-            // Keep the counter sane even if Windows sends a duplicate close notification.
-            Interlocked.Exchange(ref _trackedWindowCount, 0);
-
-            var values = ApplicationData.Current.LocalSettings.Values;
-            var exitTray = values.TryGetValue(Constants.ExitTrayWhenLastWindowClosedKey, out var value) &&
-                           value is bool enabled && enabled;
-
-            if (exitTray && Windows.UI.Xaml.Application.Current is App app)
-            {
-                // ReSharper disable once AssignmentIsFullyDiscarded
-                _ = app.QuitTrayAfterLastWindowClosedAsync();
-            }
+            PublishTrackedWindowCount(remaining);
         }
 
-        private async Task QuitTrayAfterLastWindowClosedAsync()
+        private static void PublishTrackedWindowCount(int count)
         {
-            try
-            {
-                await _trayProcessCommunicationService.QuitApplicationAsync().ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                Logger.Instance.Debug("Failed to exit tray process after the last window closed. Exception: {0}", e);
-            }
+            ApplicationData.Current.LocalSettings.Values[Constants.ActiveFrontendWindowCountKey] = count;
         }
     }
 }
