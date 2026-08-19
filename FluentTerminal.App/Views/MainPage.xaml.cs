@@ -22,6 +22,7 @@ namespace FluentTerminal.App.Views
     public sealed partial class MainPage : Page, INotifyPropertyChanged
     {
         private CoreApplicationViewTitleBar _coreTitleBar = CoreApplication.GetCurrentView().TitleBar;
+        private bool _windowTracked = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -51,6 +52,7 @@ namespace FluentTerminal.App.Views
         public MainPage()
         {
             InitializeComponent();
+            App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             Window.Current.SetTitleBar(TitleBar);
             Loaded += OnLoaded;
@@ -90,6 +92,12 @@ namespace FluentTerminal.App.Views
 
         private void ViewModel_Closed(object sender, EventArgs e)
         {
+            if (_windowTracked)
+            {
+                _windowTracked = false;
+                App.NotifyTrackedWindowClosed();
+            }
+
             TopTabBar.TabDraggedOutside -= TabBar_TabDraggedOutside;
             TopTabBar.TabWindowChanged -= TabView_Drop;
             TopTabBar.TabDraggingCompleted -= TabBar_TabDraggingCompleted;

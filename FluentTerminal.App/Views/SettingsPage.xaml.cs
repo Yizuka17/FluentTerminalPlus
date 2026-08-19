@@ -2,6 +2,7 @@
 using FluentTerminal.App.Utilities;
 using FluentTerminal.App.ViewModels;
 using FluentTerminal.App.Views.SettingsPages;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.Core;
@@ -23,10 +24,12 @@ namespace FluentTerminal.App.Views
         private readonly CoreDispatcher _dispatcher;
         private readonly NavigationViewItem hiddenNavigationItem;
         private bool _onThemesPage;
+        private bool _windowTracked = true;
 
         public SettingsPage()
         {
             InitializeComponent();
+            App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             ApplicationView.GetForCurrentView().Title = I18N.Translate("Setting");
 
@@ -74,6 +77,21 @@ namespace FluentTerminal.App.Views
             if (e.Parameter is SettingsViewModel viewModel)
             {
                 ViewModel = viewModel;
+                ViewModel.Closed += ViewModel_Closed;
+            }
+        }
+
+        private void ViewModel_Closed(object sender, EventArgs e)
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.Closed -= ViewModel_Closed;
+            }
+
+            if (_windowTracked)
+            {
+                _windowTracked = false;
+                App.NotifyTrackedWindowClosed();
             }
         }
 

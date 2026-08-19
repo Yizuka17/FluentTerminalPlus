@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 // Allgemeine Informationen über eine Assembly werden über die folgenden
 // Attribute gesteuert. Ändern Sie diese Attributwerte, um die Informationen zu ändern,
 // die einer Assembly zugeordnet sind.
-[assembly: AssemblyTitle("FluentTerminal.SystemTray")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("FluentTerminalPlus.SystemTray")]
+[assembly: AssemblyDescription("FluentTerminalPlus system tray helper")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("FluentTerminal.SystemTray")]
-[assembly: AssemblyCopyright("Copyright ©  2017")]
+[assembly: AssemblyCompany("Yizuka17")]
+[assembly: AssemblyProduct("FluentTerminalPlus")]
+[assembly: AssemblyCopyright("Copyright © Fluent Terminal contributors and Yizuka17")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
