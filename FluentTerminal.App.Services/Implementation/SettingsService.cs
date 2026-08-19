@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using FluentTerminal.App.Services.Utilities;
 using FluentTerminal.Models.Messages;
@@ -17,12 +18,14 @@ namespace FluentTerminal.App.Services.Implementation
         public const string DefaultShellProfileKey = "DefaultShellProfile";
         public const string DefaultSshProfileKey = "DefaultSshProfile";
 
-        private static readonly Guid BuiltInPowerShellProfileId =
+        private static readonly Guid BuiltInWindowsPowerShellProfileId =
             Guid.Parse("813f2298-210a-481a-bdbf-c17bc637a3e2");
 
-        // This profile is intentionally virtual instead of being persisted into the user's settings.
-        // Existing Fluent Terminal installations therefore gain an administrator entry without a
-        // settings migration, and removing/resetting settings cannot accidentally strip elevation.
+        private static readonly Guid PowerShell7ProfileId =
+            Guid.Parse("5aae4468-bbd7-44b2-9b88-c6660dbee24c");
+
+        // The administrator profile is intentionally virtual instead of being persisted into the user's
+        // settings. It remains a product capability and cannot accidentally lose elevation settings.
         private static readonly Guid AdministratorPowerShellProfileId =
             Guid.Parse("7c6fa63f-a1df-48da-a2b8-14b41c271209");
 
@@ -60,6 +63,53 @@ namespace FluentTerminal.App.Services.Implementation
                     _shellProfiles.WriteValueAsJson(shellProfile.Id.ToString(), shellProfile);
                 }
             }
+
+            // Plus adds PowerShell 7 as a separate built-in profile. Do not repurpose or overwrite the
+            // upstream Windows PowerShell 5.1 profile: users should be able to select either shell.
+            if (_shellProfiles.ReadValueFromJson(PowerShell7ProfileId.ToString(), default(ShellProfile)) == null)
+            {
+                var powerShell7 = CreatePowerShell7Profile();
+                _shellProfiles.WriteValueAsJson(powerShell7.Id.ToString(), powerShell7);
+            }
+        }
+
+        private static string GetPowerShell7ExecutablePath()
+        {
+            var programFiles = Environment.GetEnvironmentVariable("ProgramW6432");
+            if (string.IsNullOrWhiteSpace(programFiles))
+            {
+                programFiles = Environment.GetEnvironmentVariable("ProgramFiles");
+            }
+            if (string.IsNullOrWhiteSpace(programFiles))
+            {
+                programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            }
+            if (string.IsNullOrWhiteSpace(programFiles))
+            {
+                programFiles = @"C:\Program Files";
+            }
+
+            return Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
+        }
+
+        private static ShellProfile CreatePowerShell7Profile()
+        {
+            return new ShellProfile
+            {
+                Id = PowerShell7ProfileId,
+                Name = "PowerShell 7",
+                MigrationVersion = ShellProfile.CurrentMigrationVersion,
+                Arguments = string.Empty,
+                Location = GetPowerShell7ExecutablePath(),
+                PreInstalled = true,
+                WorkingDirectory = string.Empty,
+                UseConPty = true,
+                UseBuffer = false,
+                EnvironmentVariables = new Dictionary<string, string>
+                {
+                    ["TERM"] = "xterm-256color"
+                }
+            };
         }
 
         private static ShellProfile CreateAdministratorPowerShellProfile()
@@ -70,9 +120,7 @@ namespace FluentTerminal.App.Services.Implementation
                 Name = "PowerShell 7 (Admin)",
                 MigrationVersion = ShellProfile.CurrentMigrationVersion,
                 Arguments = string.Empty,
-                // The ConPTY launch layer upgrades this legacy path to PowerShell 7 when pwsh.exe is installed,
-                // while retaining Windows PowerShell as a safe fallback on machines without PS7.
-                Location = @"C:\windows\system32\WindowsPowerShell\v1.0\powershell.exe",
+                Location = GetPowerShell7ExecutablePath(),
                 PreInstalled = true,
                 WorkingDirectory = string.Empty,
                 UseConPty = true,
@@ -85,11 +133,11 @@ namespace FluentTerminal.App.Services.Implementation
             };
         }
 
-        private static ShellProfile NormalizeBuiltInPowerShellProfile(ShellProfile profile)
+        private static ShellProfile NormalizeBuiltInWindowsPowerShellProfile(ShellProfile profile)
         {
-            if (profile != null && profile.Id == BuiltInPowerShellProfileId && profile.PreInstalled)
+            if (profile != null && profile.Id == BuiltInWindowsPowerShellProfileId && profile.PreInstalled)
             {
-                profile.Name = "PowerShell 7";
+                profile.Name = "Windows PowerShell";
             }
 
             return profile;
@@ -277,7 +325,7 @@ namespace FluentTerminal.App.Services.Implementation
             var profile = GetShellProfile(id);
             if (profile == null)
             {
-                id = _defaultValueProvider.GetDefaultShellProfileId();
+                id = PowerShell7ProfileId;
                 SaveDefaultShellProfileId(id);
                 profile = GetShellProfile(id);
             }
@@ -291,7 +339,7 @@ namespace FluentTerminal.App.Services.Implementation
                 return CreateAdministratorPowerShellProfile();
             }
 
-            return NormalizeBuiltInPowerShellProfile(
+            return NormalizeBuiltInWindowsPowerShellProfile(
                 _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile)));
         }
 
@@ -306,7 +354,7 @@ namespace FluentTerminal.App.Services.Implementation
             {
                 return (Guid)value;
             }
-            return _defaultValueProvider.GetDefaultShellProfileId();
+            return PowerShell7ProfileId;
         }
 
         public IDictionary<string, ICollection<KeyBinding>> GetCommandKeyBindings()
@@ -325,7 +373,7 @@ namespace FluentTerminal.App.Services.Implementation
             var profiles = _shellProfiles.GetAll()
                 .Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile)
-                .Select(NormalizeBuiltInPowerShellProfile)
+                .Select(NormalizeBuiltInWindowsPowerShellProfile)
                 .Where(x => x.Id != AdministratorPowerShellProfileId)
                 .ToList();
 

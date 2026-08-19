@@ -56,15 +56,46 @@ namespace FluentTerminal.SystemTray.Services.ConPty
                 return location;
             }
 
-            // Upstream's built-in profile points to Windows PowerShell 5.1. Prefer PS7 without
-            // forcing a settings migration; machines without PS7 keep the original fallback.
-            if (location.EndsWith(@"\WindowsPowerShell\v1.0\powershell.exe", StringComparison.OrdinalIgnoreCase))
+            // Respect an explicit Windows PowerShell 5.1 profile. Only profiles that actually request
+            // pwsh.exe are resolved to PowerShell 7; this keeps PS5 and PS7 as separate selectable shells.
+            if (File.Exists(location))
             {
-                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                var powerShell7 = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe");
-                if (System.IO.File.Exists(powerShell7))
+                return location;
+            }
+
+            if (string.Equals(Path.GetFileName(location), "pwsh.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                var roots = new[]
                 {
-                    return powerShell7;
+                    Environment.GetEnvironmentVariable("ProgramW6432"),
+                    Environment.GetEnvironmentVariable("ProgramFiles"),
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+                };
+
+                foreach (var root in roots)
+                {
+                    if (string.IsNullOrWhiteSpace(root))
+                    {
+                        continue;
+                    }
+
+                    var powerShell7 = Path.Combine(root, "PowerShell", "7", "pwsh.exe");
+                    if (File.Exists(powerShell7))
+                    {
+                        return powerShell7;
+                    }
+                }
+
+                // Keep the previous safe fallback for machines without PowerShell 7, but do not
+                // rewrite a genuine Windows PowerShell profile into PowerShell 7.
+                var windowsPowerShell = Path.Combine(
+                    Environment.SystemDirectory,
+                    "WindowsPowerShell",
+                    "v1.0",
+                    "powershell.exe");
+                if (File.Exists(windowsPowerShell))
+                {
+                    return windowsPowerShell;
                 }
             }
 

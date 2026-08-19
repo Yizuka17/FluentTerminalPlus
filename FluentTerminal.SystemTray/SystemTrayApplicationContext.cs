@@ -22,7 +22,7 @@ namespace FluentTerminal.SystemTray
 
             _notifyIcon = new NotifyIcon();
             _notifyIcon.DoubleClick += OpenAppAsync;
-            _notifyIcon.Text = "Fluent Terminal";
+            _notifyIcon.Text = "FluentTerminalPlus";
 
             if (SystemUsesLightTheme())
             {
@@ -45,7 +45,7 @@ namespace FluentTerminal.SystemTray
 
         private void NewWindow(object sender, EventArgs e)
         {
-            Process.Start("flute.exe", "new");
+            Process.Start("fluentterminalplus.exe", "new");
         }
 
         private async void OpenAppAsync(object sender, EventArgs e)
@@ -56,7 +56,7 @@ namespace FluentTerminal.SystemTray
 
         private void ShowSettings(object sender, EventArgs e)
         {
-            Process.Start("flute.exe", "settings");
+            Process.Start("fluentterminalplus.exe", "settings");
         }
 
         /// <summary>
