@@ -249,6 +249,12 @@
                                     IsEnabled="{x:Bind InEditMode, Mode=OneWay}"
                                     IsOn="{x:Bind ProfileVm.UseConPty, Mode=TwoWay}" />
 
+                                <ToggleSwitch
+                                    Margin="{StaticResource ItemMargin}"
+                                    Header="Run as administrator"
+                                    IsEnabled="{x:Bind InEditMode, Mode=OneWay}"
+                                    IsOn="{x:Bind ProfileVm.RunAsAdministrator, Mode=TwoWay}" />
+
                                 <StackPanel Margin="{StaticResource ItemMargin}">
                                     <TextBlock
                                         x:Uid="EnvironmentVariables"
@@ -338,6 +344,18 @@
                                     <ContentControl
                                         Margin="0,6,0,0"
                                         Content="{x:Bind ProfileVm.UseConPty, Mode=OneWay}"
+                                        ContentTemplateSelector="{StaticResource UseConPtyTemplateSelector}"
+                                        FontSize="18"
+                                        FontWeight="Light" />
+                                </controls:HeaderedContentControl>
+
+                                <controls:HeaderedContentControl
+                                    Margin="{StaticResource ItemMargin}"
+                                    HorizontalContentAlignment="Stretch"
+                                    Header="Run as administrator">
+                                    <ContentControl
+                                        Margin="0,6,0,0"
+                                        Content="{x:Bind ProfileVm.RunAsAdministrator, Mode=OneWay}"
                                         ContentTemplateSelector="{StaticResource UseConPtyTemplateSelector}"
                                         FontSize="18"
                                         FontWeight="Light" />

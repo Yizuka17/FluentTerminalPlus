@@ -24,11 +24,6 @@ namespace FluentTerminal.App.Services.Implementation
         private static readonly Guid PowerShell7ProfileId =
             Guid.Parse("5aae4468-bbd7-44b2-9b88-c6660dbee24c");
 
-        // The administrator profile is intentionally virtual instead of being persisted into the user's
-        // settings. It remains a product capability and cannot accidentally lose elevation settings.
-        private static readonly Guid AdministratorPowerShellProfileId =
-            Guid.Parse("7c6fa63f-a1df-48da-a2b8-14b41c271209");
-
         private readonly IDefaultValueProvider _defaultValueProvider;
         private readonly IApplicationDataContainer _keyBindings;
         private readonly IApplicationDataContainer _localSettings;
@@ -112,27 +107,6 @@ namespace FluentTerminal.App.Services.Implementation
             };
         }
 
-        private static ShellProfile CreateAdministratorPowerShellProfile()
-        {
-            return new ShellProfile
-            {
-                Id = AdministratorPowerShellProfileId,
-                Name = "PowerShell 7 (Admin)",
-                MigrationVersion = ShellProfile.CurrentMigrationVersion,
-                Arguments = string.Empty,
-                Location = GetPowerShell7ExecutablePath(),
-                PreInstalled = true,
-                WorkingDirectory = string.Empty,
-                UseConPty = true,
-                UseBuffer = false,
-                RunAsAdministrator = true,
-                EnvironmentVariables = new Dictionary<string, string>
-                {
-                    ["TERM"] = "xterm-256color"
-                }
-            };
-        }
-
         private static ShellProfile NormalizeBuiltInWindowsPowerShellProfile(ShellProfile profile)
         {
             if (profile != null && profile.Id == BuiltInWindowsPowerShellProfileId && profile.PreInstalled)
@@ -161,7 +135,7 @@ namespace FluentTerminal.App.Services.Implementation
                 config.Themes.Add(theme);
             }
 
-            foreach (var profile in GetShellProfiles().Where(x => x.Id != AdministratorPowerShellProfileId))
+            foreach (var profile in GetShellProfiles())
             {
                 config.Profiles.Add(profile);
             }
@@ -217,12 +191,6 @@ namespace FluentTerminal.App.Services.Implementation
 
             foreach (var profile in config.Profiles)
             {
-                // The built-in administrator profile is generated locally and is not imported.
-                if (profile.Id == AdministratorPowerShellProfileId)
-                {
-                    continue;
-                }
-
                 var existingProfile = GetShellProfile(profile.Id);
                 var isNew = existingProfile == default;
 
@@ -260,11 +228,6 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void DeleteShellProfile(Guid id)
         {
-            if (id == AdministratorPowerShellProfileId)
-            {
-                return;
-            }
-
             _shellProfiles.Delete(id.ToString());
             WeakReferenceMessenger.Default.Send(new ShellProfileDeletedMessage(id));
         }
@@ -334,11 +297,6 @@ namespace FluentTerminal.App.Services.Implementation
 
         public ShellProfile GetShellProfile(Guid id)
         {
-            if (id == AdministratorPowerShellProfileId)
-            {
-                return CreateAdministratorPowerShellProfile();
-            }
-
             return NormalizeBuiltInWindowsPowerShellProfile(
                 _shellProfiles.ReadValueFromJson(id.ToString(), default(ShellProfile)));
         }
@@ -370,15 +328,11 @@ namespace FluentTerminal.App.Services.Implementation
 
         public IEnumerable<ShellProfile> GetShellProfiles()
         {
-            var profiles = _shellProfiles.GetAll()
+            return _shellProfiles.GetAll()
                 .Select(x => JsonConvert.DeserializeObject<ShellProfile>((string)x))
                 .Select(MoshBackwardCompatibilityFixProfile)
                 .Select(NormalizeBuiltInWindowsPowerShellProfile)
-                .Where(x => x.Id != AdministratorPowerShellProfileId)
                 .ToList();
-
-            profiles.Add(CreateAdministratorPowerShellProfile());
-            return profiles;
         }
 
         public IEnumerable<SshProfile> GetSshProfiles()
@@ -483,13 +437,6 @@ namespace FluentTerminal.App.Services.Implementation
 
         public void SaveShellProfile(ShellProfile shellProfile, bool newShell = false)
         {
-            if (shellProfile.Id == AdministratorPowerShellProfileId)
-            {
-                // Keep the generated admin profile immutable. It is a product capability rather than
-                // a user-owned profile and must always retain RunAsAdministrator=true.
-                return;
-            }
-
             _shellProfiles.WriteValueAsJson(shellProfile.Id.ToString(), shellProfile);
 
             WeakReferenceMessenger.Default.Send(new KeyBindingsChangedMessage());

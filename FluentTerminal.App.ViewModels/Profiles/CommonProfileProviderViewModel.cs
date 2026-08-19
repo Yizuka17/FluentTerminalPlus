@@ -46,6 +46,14 @@ namespace FluentTerminal.App.ViewModels.Profiles
             set => SetProperty(ref _arguments, value);
         }
 
+        private bool _runAsAdministrator;
+
+        public bool RunAsAdministrator
+        {
+            get => _runAsAdministrator;
+            set => SetProperty(ref _runAsAdministrator, value);
+        }
+
         #endregion Properties
 
         #region Commands
@@ -80,6 +88,7 @@ namespace FluentTerminal.App.ViewModels.Profiles
             Location = profile.Location;
             Arguments = profile.Arguments;
             WorkingDirectory = profile.WorkingDirectory;
+            RunAsAdministrator = profile.RunAsAdministrator;
         }
 
         protected override void LoadFromProfile(ShellProfile profile)
@@ -96,6 +105,7 @@ namespace FluentTerminal.App.ViewModels.Profiles
             profile.Location = _location;
             profile.Arguments = _arguments;
             profile.WorkingDirectory = _workingDirectory;
+            profile.RunAsAdministrator = _runAsAdministrator;
         }
 
         public override async Task<string> ValidateAsync()
@@ -121,7 +131,8 @@ namespace FluentTerminal.App.ViewModels.Profiles
         {
             return base.HasChanges() || !Model.Location.NullableEqualTo(_location) ||
                    !Model.WorkingDirectory.NullableEqualTo(_workingDirectory) ||
-                   !Model.Arguments.NullableEqualTo(_arguments);
+                   !Model.Arguments.NullableEqualTo(_arguments) ||
+                   Model.RunAsAdministrator != _runAsAdministrator;
         }
 
         // Requires UI thread
