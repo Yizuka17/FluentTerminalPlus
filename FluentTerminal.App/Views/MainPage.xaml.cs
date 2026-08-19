@@ -1,5 +1,6 @@
 ﻿using FluentTerminal.App.Utilities;
 using FluentTerminal.App.ViewModels;
+using FluentTerminal.App.ViewModels.Settings;
 using System;
 using System.ComponentModel;
 using System.Linq;
@@ -22,6 +23,7 @@ namespace FluentTerminal.App.Views
     public sealed partial class MainPage : Page, INotifyPropertyChanged
     {
         private CoreApplicationViewTitleBar _coreTitleBar = CoreApplication.GetCurrentView().TitleBar;
+        private readonly UISettings _uiSettings;
         private bool _windowTracked = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -62,12 +64,51 @@ namespace FluentTerminal.App.Views
             _propertyChangedCallbackToken = RegisterPropertyChangedCallback(RequestedThemeProperty, OnRequestedThemeProperty);
             ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
 
+            _uiSettings = new UISettings();
+            _uiSettings.ColorValuesChanged += OnColorValuesChanged;
+
             ApplicationView.PreferredLaunchWindowingMode = ApplicationViewWindowingMode.Auto;
         }
 
         private void OnRequestedThemeProperty(DependencyObject sender, DependencyProperty dp)
         {
             ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+        }
+
+        private async void OnColorValuesChanged(UISettings sender, object args)
+        {
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, ApplyAppearanceAndPairedTheme);
+        }
+
+        private void ApplyAppearanceAndPairedTheme()
+        {
+            var requestedTheme = AppThemeManager.GetRequestedTheme();
+            if (RequestedTheme != requestedTheme)
+            {
+                RequestedTheme = requestedTheme;
+            }
+            else
+            {
+                // System mode can change while RequestedTheme remains ElementTheme.Default.
+                ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
+            }
+
+            var settingsService = ViewModel?.SelectedTerminal?.SettingsService;
+            if (settingsService == null)
+            {
+                return;
+            }
+
+            var preferredThemeId = AppThemeManager.GetPreferredTerminalThemeId();
+            if (settingsService.GetTheme(preferredThemeId) == null)
+            {
+                ThemesPageViewModel.EnsureWindowsTerminalThemes(settingsService);
+            }
+
+            if (settingsService.GetTheme(preferredThemeId) != null && settingsService.GetCurrentThemeId() != preferredThemeId)
+            {
+                settingsService.SaveCurrentThemeId(preferredThemeId);
+            }
         }
 
         private async void MainPage_DraggingHappensChanged(object sender, bool e)
@@ -88,6 +129,7 @@ namespace FluentTerminal.App.Views
             {
                 ViewModel = viewModel;
                 ViewModel.Closed += ViewModel_Closed;
+                ApplyAppearanceAndPairedTheme();
             }
             base.OnNavigatedTo(e);
         }
@@ -118,6 +160,7 @@ namespace FluentTerminal.App.Views
             Loaded -= OnLoaded;
             DraggingHappensChanged -= MainPage_DraggingHappensChanged;
             Window.Current.Activated -= OnWindowActivated;
+            _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
 
             _coreTitleBar.LayoutMetricsChanged -= OnLayoutMetricsChanged;
 
@@ -135,16 +178,7 @@ namespace FluentTerminal.App.Views
         {
             if (e.WindowActivationState != CoreWindowActivationState.Deactivated)
             {
-                var requestedTheme = AppThemeManager.GetRequestedTheme();
-                if (RequestedTheme != requestedTheme)
-                {
-                    RequestedTheme = requestedTheme;
-                }
-                else
-                {
-                    // System mode can change without the RequestedTheme value itself changing.
-                    ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
-                }
+                ApplyAppearanceAndPairedTheme();
             }
 
             if (e.WindowActivationState != CoreWindowActivationState.Deactivated && TerminalContainer.Content is TerminalView terminal)
@@ -158,6 +192,7 @@ namespace FluentTerminal.App.Views
         {
             _coreTitleBar.LayoutMetricsChanged += OnLayoutMetricsChanged;
             UpdateLayoutMetrics();
+            ApplyAppearanceAndPairedTheme();
         }
 
         private void OnLayoutMetricsChanged(CoreApplicationViewTitleBar sender, object e)
