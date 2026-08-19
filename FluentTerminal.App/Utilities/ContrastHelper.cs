@@ -1,4 +1,5 @@
 ﻿using Microsoft.Toolkit.Uwp.Helpers;
+using System;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.ViewManagement;
@@ -9,6 +10,11 @@ namespace FluentTerminal.App.Utilities
     public static class AppThemeManager
     {
         public const string AppThemeModeKey = "AppThemeMode";
+        public const string LightTerminalThemeIdKey = "LightTerminalThemeId";
+        public const string DarkTerminalThemeIdKey = "DarkTerminalThemeId";
+
+        public static readonly Guid DefaultLightTerminalThemeId = Guid.Parse("b77e7d74-53bb-4543-9fac-c9145e0f9230");
+        public static readonly Guid DefaultDarkTerminalThemeId = Guid.Parse("8a4acdfa-9fbe-4bbc-a73d-0aef8504f6ee");
 
         // 0 = follow system, 1 = light, 2 = dark.
         public static int GetModeIndex()
@@ -43,6 +49,44 @@ namespace FluentTerminal.App.Utilities
                 default:
                     return ElementTheme.Default;
             }
+        }
+
+        public static Guid GetLightTerminalThemeId()
+        {
+            return GetStoredThemeId(LightTerminalThemeIdKey, DefaultLightTerminalThemeId);
+        }
+
+        public static Guid GetDarkTerminalThemeId()
+        {
+            return GetStoredThemeId(DarkTerminalThemeIdKey, DefaultDarkTerminalThemeId);
+        }
+
+        public static void SetLightTerminalThemeId(Guid id)
+        {
+            ApplicationData.Current.LocalSettings.Values[LightTerminalThemeIdKey] = id.ToString();
+        }
+
+        public static void SetDarkTerminalThemeId(Guid id)
+        {
+            ApplicationData.Current.LocalSettings.Values[DarkTerminalThemeIdKey] = id.ToString();
+        }
+
+        public static Guid GetPreferredTerminalThemeId()
+        {
+            return ContrastHelper.ResolveTheme(GetRequestedTheme()) == ElementTheme.Light
+                ? GetLightTerminalThemeId()
+                : GetDarkTerminalThemeId();
+        }
+
+        private static Guid GetStoredThemeId(string key, Guid fallback)
+        {
+            var values = ApplicationData.Current.LocalSettings.Values;
+            if (values.TryGetValue(key, out var value) && value is string text && Guid.TryParse(text, out var parsed))
+            {
+                return parsed;
+            }
+
+            return fallback;
         }
     }
 
