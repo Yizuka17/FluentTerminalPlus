@@ -16,13 +16,14 @@ namespace FluentTerminal.App.Dialogs
             var currentTheme = settingsService.GetCurrentTheme();
             RequestedTheme = ContrastHelper.GetIdealThemeForBackgroundColor(currentTheme.Colors.Background);
 
-            CreatedBy.Inlines.Add(new Run { Text = "Created by " });
-            CreatedBy.Inlines.Add(new Italic { Inlines = { new Run { Text = "felixse " } } });
-            CreatedBy.Inlines.Add(new Run { Text = "and " });
+            CreatedBy.Inlines.Add(new Run { Text = "FluentTerminalPlus by " });
+            CreatedBy.Inlines.Add(new Hyperlink { Inlines = { new Run { Text = "Yizuka17" } }, NavigateUri = new Uri("https://github.com/Yizuka17") });
+            CreatedBy.Inlines.Add(new Run { Text = ", based on Fluent Terminal by felixse and " });
             CreatedBy.Inlines.Add(new Hyperlink { Inlines = { new Run { Text = "contributors" } }, NavigateUri = new Uri("https://github.com/felixse/FluentTerminal/graphs/contributors") });
 
-            CurrentVersion.Text = updateService.GetCurrentVersion().ToString();
-            ReleaseNotesHyperlink.NavigateUri = new Uri("https://github.com/felixse/FluentTerminal/releases/tag/" + CurrentVersion.Text);
+            var currentVersion = updateService.GetCurrentVersion();
+            CurrentVersion.Text = currentVersion.ToString();
+            ReleaseNotesHyperlink.NavigateUri = new Uri($"https://github.com/Yizuka17/FluentTerminalPlus/releases/tag/v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}");
         }
 
         public new Task ShowAsync()
