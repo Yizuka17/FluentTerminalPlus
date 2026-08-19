@@ -28,7 +28,7 @@
                 <Image Source="/Images/AppIcons/StoreLogo.scale-400.png" Stretch="None" />
             </Viewbox>
             <StackPanel Grid.Column="2">
-                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Fluent Terminal" />
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="FluentTerminalPlus" />
                 <TextBlock>
                     <Run x:Name="CurrentVersion" />
                     <Run>-</Run>
@@ -40,13 +40,19 @@
         </Grid>
 
         <TextBlock>
-            <Hyperlink NavigateUri="https://github.com/felixse/FluentTerminal">
+            <Hyperlink NavigateUri="https://github.com/Yizuka17/FluentTerminalPlus">
                 <Run Text="GitHub" />
             </Hyperlink>
         </TextBlock>
 
         <TextBlock>
-            <Hyperlink NavigateUri="https://github.com/felixse/FluentTerminal/blob/master/LICENSE">
+            <Hyperlink NavigateUri="https://17yizuka.com">
+                <Run Text="17yizuka.com" />
+            </Hyperlink>
+        </TextBlock>
+
+        <TextBlock>
+            <Hyperlink NavigateUri="https://github.com/Yizuka17/FluentTerminalPlus/blob/master/LICENSE">
                 <Run x:Uid="License" />
             </Hyperlink>
         </TextBlock>
