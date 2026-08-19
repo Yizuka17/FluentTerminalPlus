@@ -29,7 +29,7 @@ namespace FluentTerminal.App.Views
         public SettingsPage()
         {
             InitializeComponent();
-            GeneralSettings.NotifyTrackedWindowCreated();
+            App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             ApplicationView.GetForCurrentView().Title = I18N.Translate("Setting");
 
@@ -91,7 +91,7 @@ namespace FluentTerminal.App.Views
             if (_windowTracked)
             {
                 _windowTracked = false;
-                GeneralSettings.NotifyTrackedWindowClosed();
+                App.NotifyTrackedWindowClosed();
             }
         }
 
