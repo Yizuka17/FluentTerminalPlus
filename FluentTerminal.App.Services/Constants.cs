@@ -12,5 +12,6 @@
         public const string ExecutedCommandsContainerName = "HistoryContainer";
         public const string TerminalViewModelStateId = "TerminalViewModelState";
         public const string ExitTrayWhenLastWindowClosedKey = "ExitTrayWhenLastWindowClosed";
+        public const string ActiveFrontendWindowCountKey = "ActiveFrontendWindowCount";
     }
 }
