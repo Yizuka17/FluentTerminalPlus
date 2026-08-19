@@ -29,6 +29,7 @@ namespace FluentTerminal.App.Views
         public SettingsPage()
         {
             InitializeComponent();
+            RequestedTheme = AppThemeManager.GetRequestedTheme();
             App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             ApplicationView.GetForCurrentView().Title = I18N.Translate("Setting");
@@ -63,8 +64,7 @@ namespace FluentTerminal.App.Views
         {
             return _dispatcher.ExecuteAsync(() =>
             {
-                var theme = Application.Current.RequestedTheme == ApplicationTheme.Light ? ElementTheme.Light : ElementTheme.Dark;
-                ContrastHelper.SetTitleBarButtonsForTheme(theme);
+                ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
             });
         }
 
@@ -158,6 +158,8 @@ namespace FluentTerminal.App.Views
 
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
+            RequestedTheme = AppThemeManager.GetRequestedTheme();
+            ContrastHelper.SetTitleBarButtonsForTheme(RequestedTheme);
             ApplicationView.GetForCurrentView().TryResizeView(new Size { Width = 1024, Height = 768 });
         }
     }
