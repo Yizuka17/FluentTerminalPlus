@@ -101,6 +101,139 @@ namespace FluentTerminal.SystemTray.Services
             return _cachedLogPath[terminalId];
         }
 
+        private static bool IsPowerShell7Location(string location)
+        {
+            return !string.IsNullOrWhiteSpace(location) &&
+                   string.Equals(Path.GetFileName(location), "pwsh.exe", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolvePowerShell7Location(string location)
+        {
+            if (string.IsNullOrWhiteSpace(location) || System.IO.File.Exists(location))
+            {
+                return location;
+            }
+
+            if (!IsPowerShell7Location(location))
+            {
+                return location;
+            }
+
+            // First use the persistent PATH rather than the SystemTray process PATH. Desktop Bridge
+            // may inherit a truncated PATH, while the user PATH normally contains the Store app
+            // execution alias directory (%LOCALAPPDATA%\Microsoft\WindowsApps).
+            var pathValues = new[]
+            {
+                Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User),
+                Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.Machine),
+                Environment.GetEnvironmentVariable("Path")
+            };
+
+            foreach (var pathValue in pathValues)
+            {
+                if (string.IsNullOrWhiteSpace(pathValue))
+                {
+                    continue;
+                }
+
+                foreach (var rawDirectory in pathValue.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var directory = Environment.ExpandEnvironmentVariables(rawDirectory.Trim().Trim('"'));
+                    if (string.IsNullOrWhiteSpace(directory))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var candidate = Path.Combine(directory, "pwsh.exe");
+                        if (System.IO.File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Ignore malformed PATH entries and continue searching.
+                    }
+                }
+            }
+
+            // Explicitly try the App Execution Alias used by Microsoft Store packages even if the
+            // user's PATH has been customized and no longer contains WindowsApps.
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(localAppData))
+            {
+                var alias = Path.Combine(localAppData, "Microsoft", "WindowsApps", "pwsh.exe");
+                if (System.IO.File.Exists(alias))
+                {
+                    return alias;
+                }
+            }
+
+            var programFilesRoots = new[]
+            {
+                Environment.GetEnvironmentVariable("ProgramW6432"),
+                Environment.GetEnvironmentVariable("ProgramFiles"),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+            };
+
+            foreach (var root in programFilesRoots)
+            {
+                if (string.IsNullOrWhiteSpace(root))
+                {
+                    continue;
+                }
+
+                var normalInstall = Path.Combine(root, "PowerShell", "7", "pwsh.exe");
+                if (System.IO.File.Exists(normalInstall))
+                {
+                    return normalInstall;
+                }
+
+                // Last-resort Store package lookup. The package directory is versioned, so never
+                // persist this path in the profile; resolve it afresh for each terminal launch.
+                var windowsApps = Path.Combine(root, "WindowsApps");
+                try
+                {
+                    string newestStorePwsh = null;
+                    foreach (var packageDirectory in Directory.EnumerateDirectories(
+                                 windowsApps,
+                                 "Microsoft.PowerShell_*__8wekyb3d8bbwe",
+                                 SearchOption.TopDirectoryOnly))
+                    {
+                        var candidate = Path.Combine(packageDirectory, "pwsh.exe");
+                        if (!System.IO.File.Exists(candidate))
+                        {
+                            continue;
+                        }
+
+                        if (newestStorePwsh == null ||
+                            string.Compare(candidate, newestStorePwsh, StringComparison.OrdinalIgnoreCase) > 0)
+                        {
+                            newestStorePwsh = candidate;
+                        }
+                    }
+
+                    if (newestStorePwsh != null)
+                    {
+                        return newestStorePwsh;
+                    }
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // WindowsApps enumeration can be ACL-restricted; the alias lookup above is the
+                    // normal Store path and does not require directory enumeration.
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    // No Store package directory on this installation.
+                }
+            }
+
+            return location;
+        }
+
         public CreateTerminalResponse CreateTerminal(CreateTerminalRequest request)
         {
             if (_terminals.ContainsKey(request.Id))
@@ -114,6 +247,20 @@ namespace FluentTerminal.SystemTray.Services
             }
 
             request.Profile.Location = Utilities.ResolveLocation(request.Profile.Location);
+
+            if (IsPowerShell7Location(request.Profile.Location))
+            {
+                var resolvedPowerShell7 = ResolvePowerShell7Location(request.Profile.Location);
+                if (string.IsNullOrWhiteSpace(resolvedPowerShell7) || !System.IO.File.Exists(resolvedPowerShell7))
+                {
+                    return new CreateTerminalResponse
+                    {
+                        Error = "PowerShell 7 (pwsh.exe) was not found. FluentTerminalPlus checked the persistent PATH, the Microsoft Store app execution alias, Program Files, and installed Store package locations."
+                    };
+                }
+
+                request.Profile.Location = resolvedPowerShell7;
+            }
 
             ITerminalSession terminal = null;
             try
@@ -212,7 +359,7 @@ namespace FluentTerminal.SystemTray.Services
             };
             if (_terminals.TryGetValue(id, out TerminalSessionInfo sessionInfo))
             {
-                sessionInfo.Session.Pause(pause);
+                sessionInfo.Session.Pause(value: pause);
             }
             return response;
         }
