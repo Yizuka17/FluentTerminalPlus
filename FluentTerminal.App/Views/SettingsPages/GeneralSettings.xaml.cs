@@ -3,7 +3,6 @@ using FluentTerminal.App.Services.Utilities;
 using FluentTerminal.App.ViewModels.Settings;
 using System;
 using System.Linq;
-using System.Threading;
 using Windows.Globalization;
 using Windows.Storage;
 using Windows.UI.Xaml;
@@ -92,29 +91,43 @@ namespace FluentTerminal.App
 {
     public sealed partial class App
     {
-        private static int _trackedWindowCount;
-
+        // ApplicationViewAdapter already gives us a reliable close notification. The old
+        // counter could drift when UWP views were consolidated in an unexpected order, so
+        // use the application's real view-model state instead.
         internal static void NotifyTrackedWindowCreated()
         {
-            var count = Interlocked.Increment(ref _trackedWindowCount);
-            PublishTrackedWindowCount(count);
         }
 
         internal static void NotifyTrackedWindowClosed()
         {
-            var remaining = Interlocked.Decrement(ref _trackedWindowCount);
-            if (remaining < 0)
+            if (Windows.UI.Xaml.Application.Current is App app)
             {
-                Interlocked.Exchange(ref _trackedWindowCount, 0);
-                remaining = 0;
+                app.ExitAfterLastWindowClosed();
             }
-
-            PublishTrackedWindowCount(remaining);
         }
 
-        private static void PublishTrackedWindowCount(int count)
+        private void ExitAfterLastWindowClosed()
         {
-            ApplicationData.Current.LocalSettings.Values[Constants.ActiveFrontendWindowCountKey] = count;
+            var values = ApplicationData.Current.LocalSettings.Values;
+            var exitTray = values.TryGetValue(Constants.ExitTrayWhenLastWindowClosedKey, out var value) &&
+                           value is bool enabled && enabled;
+
+            if (!exitTray || _mainViewModels.Count > 0 || _settingsViewModel != null)
+            {
+                return;
+            }
+
+            Logger.Instance.Debug("Last FluentTerminalPlus window closed; releasing AppService deferral and exiting UWP process.");
+
+            // The tray owns the AppServiceConnection and the UWP side owns this deferral.
+            // Completing it breaks the lifetime cycle immediately instead of asking the tray
+            // to quit over the very connection that is keeping this process alive.
+            var deferral = _appServiceDeferral;
+            _appServiceDeferral = null;
+            _appServiceConnection = null;
+            deferral?.Complete();
+
+            Windows.UI.Xaml.Application.Current.Exit();
         }
     }
 }

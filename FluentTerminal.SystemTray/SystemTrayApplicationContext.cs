@@ -1,28 +1,17 @@
-﻿using FluentTerminal.App.Services;
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using Windows.ApplicationModel;
-using Windows.Storage;
 
 namespace FluentTerminal.SystemTray
 {
     public class SystemTrayApplicationContext : ApplicationContext
     {
-        private const string FrontendProcessName = "FluentTerminal.App";
-        private const int FrontendLifetimePollIntervalMs = 500;
-        private const int InitialGracePeriodTicks = 10;
-        private const int ConsecutiveNoVisibleWindowTicksBeforeExit = 2;
-
         private readonly NotifyIcon _notifyIcon;
-        private readonly Timer _frontendLifetimeTimer;
         private bool _trayIconDisposed;
-        private bool _hasSeenVisibleFrontendWindow;
-        private int _lifetimePollCount;
-        private int _consecutiveNoVisibleWindowTicks;
 
         public SystemTrayApplicationContext()
         {
@@ -49,74 +38,10 @@ namespace FluentTerminal.SystemTray
             _notifyIcon.ContextMenu = new ContextMenu(new MenuItem[] { openMenuItem, newWindowItem, settingsMenuItem, exitMenuItem });
             _notifyIcon.Visible = true;
             Application.ApplicationExit += Application_ApplicationExit;
-
-            _frontendLifetimeTimer = new Timer
-            {
-                Interval = FrontendLifetimePollIntervalMs
-            };
-            _frontendLifetimeTimer.Tick += FrontendLifetimeTimer_Tick;
-            _frontendLifetimeTimer.Start();
         }
 
         private void Exit(object sender, EventArgs e)
         {
-            ExitApplication();
-        }
-
-        private void FrontendLifetimeTimer_Tick(object sender, EventArgs e)
-        {
-            if (_trayIconDisposed)
-            {
-                return;
-            }
-
-            var values = ApplicationData.Current.LocalSettings.Values;
-            var exitWhenNoWindows =
-                values.TryGetValue(Constants.ExitTrayWhenLastWindowClosedKey, out var exitValue) &&
-                exitValue is bool enabled && enabled;
-
-            if (!exitWhenNoWindows)
-            {
-                _lifetimePollCount = 0;
-                _consecutiveNoVisibleWindowTicks = 0;
-                _hasSeenVisibleFrontendWindow = false;
-                return;
-            }
-
-            _lifetimePollCount++;
-
-            bool hasVisibleFrontendWindow;
-            try
-            {
-                hasVisibleFrontendWindow = ProcessUtils.HasVisibleWindowForProcessName(FrontendProcessName);
-            }
-            catch (Exception e)
-            {
-                Logger.Instance.Debug("Failed to inspect FluentTerminalPlus frontend windows. Exception: {0}", e);
-                _consecutiveNoVisibleWindowTicks = 0;
-                return;
-            }
-
-            if (hasVisibleFrontendWindow)
-            {
-                _hasSeenVisibleFrontendWindow = true;
-                _consecutiveNoVisibleWindowTicks = 0;
-                return;
-            }
-
-            // The full-trust helper can start before the first UWP frame/CoreWindow is visible.
-            // Give activation a short grace period so startup cannot kill the helper prematurely.
-            if (!_hasSeenVisibleFrontendWindow && _lifetimePollCount < InitialGracePeriodTicks)
-            {
-                return;
-            }
-
-            _consecutiveNoVisibleWindowTicks++;
-            if (_consecutiveNoVisibleWindowTicks < ConsecutiveNoVisibleWindowTicksBeforeExit)
-            {
-                return;
-            }
-
             ExitApplication();
         }
 
@@ -136,14 +61,6 @@ namespace FluentTerminal.SystemTray
             if (disposing)
             {
                 Application.ApplicationExit -= Application_ApplicationExit;
-
-                if (_frontendLifetimeTimer != null)
-                {
-                    _frontendLifetimeTimer.Stop();
-                    _frontendLifetimeTimer.Tick -= FrontendLifetimeTimer_Tick;
-                    _frontendLifetimeTimer.Dispose();
-                }
-
                 DisposeTrayIcon();
             }
 
