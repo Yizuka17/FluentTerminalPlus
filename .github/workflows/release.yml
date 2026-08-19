@@ -35,6 +35,9 @@ jobs:
 
       - name: Build signed x64 Release package
         shell: pwsh
+        env:
+          FTPLUS_SIGNING_PFX_BASE64: ${{ secrets.FTPLUS_SIGNING_PFX_BASE64 }}
+          FTPLUS_SIGNING_PFX_PASSWORD: ${{ secrets.FTPLUS_SIGNING_PFX_PASSWORD }}
         run: |
           $ErrorActionPreference = 'Stop'
 
@@ -66,26 +69,56 @@ jobs:
           $releaseVersion = "$($parts[0]).$($parts[1]).$($parts[2])"
           $releaseTag = "v$releaseVersion"
 
-          $certSubject = 'CN=Yizuka17.FluentTerminalPlus'
-          $certificate = New-SelfSignedCertificate `
-            -Type Custom `
-            -Subject $certSubject `
-            -FriendlyName "FluentTerminalPlus $releaseTag Release" `
-            -CertStoreLocation 'Cert:\CurrentUser\My' `
-            -KeyAlgorithm RSA `
-            -KeyLength 2048 `
-            -HashAlgorithm SHA256 `
-            -KeyUsage DigitalSignature `
-            -KeyExportPolicy Exportable `
-            -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') `
-            -NotAfter (Get-Date).AddYears(10)
+          if ([string]::IsNullOrWhiteSpace($env:FTPLUS_SIGNING_PFX_BASE64) -or
+              [string]::IsNullOrWhiteSpace($env:FTPLUS_SIGNING_PFX_PASSWORD)) {
+            throw 'Stable release signing secrets are missing. Configure FTPLUS_SIGNING_PFX_BASE64 and FTPLUS_SIGNING_PFX_PASSWORD in repository Actions secrets before publishing.'
+          }
 
-          $pfxPasswordText = [Guid]::NewGuid().ToString('N')
-          $pfxPassword = ConvertTo-SecureString $pfxPasswordText -AsPlainText -Force
           $pfxPath = Join-Path $env:RUNNER_TEMP 'FluentTerminalPlus.Release.pfx'
+          try {
+            [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:FTPLUS_SIGNING_PFX_BASE64))
+          }
+          catch {
+            throw "FTPLUS_SIGNING_PFX_BASE64 is not valid base64: $($_.Exception.Message)"
+          }
+
+          $pfxFlags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfxPath,
+            $env:FTPLUS_SIGNING_PFX_PASSWORD,
+            $pfxFlags)
+
+          $expectedSubject = 'CN=Yizuka17.FluentTerminalPlus'
+          if ($certificate.Subject -ne $expectedSubject) {
+            throw "Signing certificate subject '$($certificate.Subject)' does not match '$expectedSubject'."
+          }
+          if (-not $certificate.HasPrivateKey) {
+            throw 'The configured signing PFX does not contain a private key.'
+          }
+          if ($certificate.NotAfter -le (Get-Date).AddDays(30)) {
+            throw "The configured signing certificate expires too soon: $($certificate.NotAfter.ToString('u'))"
+          }
+
+          $codeSigningOid = '1.3.6.1.5.5.7.3.3'
+          $ekuOk = $false
+          foreach ($extension in $certificate.Extensions) {
+            if ($extension -is [System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]) {
+              foreach ($oid in $extension.EnhancedKeyUsages) {
+                if ($oid.Value -eq $codeSigningOid) { $ekuOk = $true }
+              }
+            }
+          }
+          if (-not $ekuOk) {
+            throw 'The configured signing certificate is missing the Code Signing EKU.'
+          }
+
           $cerPath = Join-Path (Resolve-Path 'FluentTerminal.Package') 'FluentTerminalPlus.Release.cer'
-          Export-PfxCertificate -Cert $certificate -FilePath $pfxPath -Password $pfxPassword | Out-Null
-          Export-Certificate -Cert $certificate -FilePath $cerPath | Out-Null
+          [System.IO.File]::WriteAllBytes(
+            $cerPath,
+            $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+          Write-Host "Using stable release certificate thumbprint $($certificate.Thumbprint)"
+          Write-Host "Certificate valid through $($certificate.NotAfter.ToString('u'))"
 
           $packageProject = 'FluentTerminal.Package\FluentTerminal.Package.wapproj'
           $packageText = Get-Content $packageProject -Raw
@@ -100,7 +133,7 @@ jobs:
             -p:Platform=x64 `
             "-p:TargetPlatformVersion=$sdkVersion" `
             "-p:PackageCertificateKeyFile=$pfxPath" `
-            "-p:PackageCertificatePassword=$pfxPasswordText" `
+            "-p:PackageCertificatePassword=$env:FTPLUS_SIGNING_PFX_PASSWORD" `
             -p:AppxPackageSigningEnabled=true `
             -m:1 `
             -restore 2>&1 | Tee-Object -FilePath msbuild-release.log
@@ -147,19 +180,17 @@ jobs:
           @"
           FluentTerminalPlus $env:RELEASE_TAG
 
-          First Plus release focused on a lightweight Windows 10 Fluent/UWP terminal shell.
+          Maintenance release for FluentTerminalPlus on Windows 10.
 
           Highlights:
-          - Windows PowerShell 5.1 and PowerShell 7 are separate built-in profiles.
-          - PowerShell 7 supports traditional installs and Microsoft Store installs.
-          - Any shell profile can be configured to launch as administrator using the per-profile option.
-          - Elevated tabs use a separate UAC-elevated ConPTY helper while the UWP UI stays non-elevated.
-          - Shell PATH is rebuilt from persistent machine and user PATH values before launch.
-          - FluentTerminalPlus has its own package identity, tray instance and command alias.
-          - General settings now include an option to exit the tray process when the last app window closes.
+          - Fixes tray lifetime tracking so the optional tray process exit happens after the final app window closes.
+          - Uses one stable release signing certificate across releases instead of creating a new certificate every build.
+          - Corrects FluentTerminalPlus product names, project links and release links left over from upstream.
+          - Improves Simplified Chinese text for Plus-specific settings.
+          - Keeps Windows PowerShell 5.1, PowerShell 7 / Store PowerShell, per-profile administrator launch and ConPTY behavior from v0.8.0.
 
           Installation:
-          Extract the ZIP, trust the included FluentTerminalPlus.Release.cer certificate, then run Install.ps1 in the package folder. The release certificate is self-signed and valid for 10 years.
+          Extract the ZIP, trust the included FluentTerminalPlus.Release.cer certificate, then run Install.ps1 in the package folder. Future releases signed with the same certificate will reuse that trust.
           "@ | Set-Content release-notes.md -Encoding UTF8
 
           gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
