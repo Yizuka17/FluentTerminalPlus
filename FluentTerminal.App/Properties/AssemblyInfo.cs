@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("FluentTerminal.App")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("FluentTerminalPlus")]
+[assembly: AssemblyDescription("FluentTerminalPlus")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("FluentTerminal.App")]
-[assembly: AssemblyCopyright("Copyright ©  2018")]
+[assembly: AssemblyCompany("Yizuka17")]
+[assembly: AssemblyProduct("FluentTerminalPlus")]
+[assembly: AssemblyCopyright("Copyright © Fluent Terminal contributors and Yizuka17")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
