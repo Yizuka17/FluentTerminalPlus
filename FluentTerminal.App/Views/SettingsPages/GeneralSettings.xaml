@@ -60,13 +60,27 @@
                 <StackPanel Margin="{StaticResource ItemMargin}">
                     <ComboBox
                         x:Name="AppThemeComboBox"
-                        Width="200"
+                        Width="240"
                         Header="{Binding Appearance, Source={StaticResource PlusStrings}}"
                         SelectionChanged="AppThemeComboBox_SelectionChanged">
                         <ComboBoxItem Content="{Binding ThemeSystem, Source={StaticResource PlusStrings}}" />
                         <ComboBoxItem Content="{Binding ThemeLight, Source={StaticResource PlusStrings}}" />
                         <ComboBoxItem Content="{Binding ThemeDark, Source={StaticResource PlusStrings}}" />
                     </ComboBox>
+                    <ComboBox
+                        Width="320"
+                        Margin="0,10,0,0"
+                        DisplayMemberPath="Name"
+                        Header="{Binding LightTerminalTheme, Source={StaticResource PlusStrings}}"
+                        ItemsSource="{x:Bind ViewModel.ThemeChoices, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedLightTheme, Mode=TwoWay}" />
+                    <ComboBox
+                        Width="320"
+                        Margin="0,10,0,0"
+                        DisplayMemberPath="Name"
+                        Header="{Binding DarkTerminalTheme, Source={StaticResource PlusStrings}}"
+                        ItemsSource="{x:Bind ViewModel.ThemeChoices, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedDarkTheme, Mode=TwoWay}" />
                 </StackPanel>
 
                 <StackPanel Margin="{StaticResource ItemMargin}">
