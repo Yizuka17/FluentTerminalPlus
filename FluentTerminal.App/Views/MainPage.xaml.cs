@@ -15,6 +15,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using Windows.UI.Xaml.Input;
 using FluentTerminal.App.Services.Utilities;
+using FluentTerminal.App.Views.SettingsPages;
 
 namespace FluentTerminal.App.Views
 {
@@ -22,6 +23,7 @@ namespace FluentTerminal.App.Views
     public sealed partial class MainPage : Page, INotifyPropertyChanged
     {
         private CoreApplicationViewTitleBar _coreTitleBar = CoreApplication.GetCurrentView().TitleBar;
+        private bool _windowTracked = true;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -51,6 +53,7 @@ namespace FluentTerminal.App.Views
         public MainPage()
         {
             InitializeComponent();
+            GeneralSettings.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             Window.Current.SetTitleBar(TitleBar);
             Loaded += OnLoaded;
@@ -90,6 +93,12 @@ namespace FluentTerminal.App.Views
 
         private void ViewModel_Closed(object sender, EventArgs e)
         {
+            if (_windowTracked)
+            {
+                _windowTracked = false;
+                GeneralSettings.NotifyTrackedWindowClosed();
+            }
+
             TopTabBar.TabDraggedOutside -= TabBar_TabDraggedOutside;
             TopTabBar.TabWindowChanged -= TabView_Drop;
             TopTabBar.TabDraggingCompleted -= TabBar_TabDraggingCompleted;
@@ -145,8 +154,8 @@ namespace FluentTerminal.App.Views
         {
             if (PropertyChanged != null)
             {
-                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarHeight)));
-                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarPadding)));
+                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarHeight));
+                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarPadding));
             }
         }
 
