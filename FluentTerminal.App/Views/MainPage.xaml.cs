@@ -129,9 +129,18 @@ namespace FluentTerminal.App.Views
             {
                 ViewModel = viewModel;
                 ViewModel.Closed += ViewModel_Closed;
+                ViewModel.PropertyChanged += ViewModel_PropertyChanged;
                 ApplyAppearanceAndPairedTheme();
             }
             base.OnNavigatedTo(e);
+        }
+
+        private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedTerminal))
+            {
+                ApplyAppearanceAndPairedTheme();
+            }
         }
 
         private void ViewModel_Closed(object sender, EventArgs e)
@@ -164,6 +173,7 @@ namespace FluentTerminal.App.Views
 
             _coreTitleBar.LayoutMetricsChanged -= OnLayoutMetricsChanged;
 
+            ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
             ViewModel.Closed -= ViewModel_Closed;
             ViewModel = null;
             Root.DataContext = null;
@@ -250,7 +260,7 @@ namespace FluentTerminal.App.Views
         }
 
         public static readonly DependencyProperty DraggingHappensProperty =
-            DependencyProperty.Register(nameof(DraggingHappens), typeof(bool), typeof(MainPage), new PropertyMetadata(null));
+            DependencyProperty.Register(nameof(DraggingHappensProperty), typeof(bool), typeof(MainPage), new PropertyMetadata(null));
 
         public bool DraggingHappens
         {
