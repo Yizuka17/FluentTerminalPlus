@@ -154,8 +154,8 @@ namespace FluentTerminal.App.Views
         {
             if (PropertyChanged != null)
             {
-                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarHeight));
-                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarPadding));
+                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarHeight)));
+                PropertyChanged(this, new PropertyChangedEventArgs(nameof(CoreTitleBarPadding)));
             }
         }
 
@@ -216,8 +216,8 @@ namespace FluentTerminal.App.Views
             e.AcceptedOperation = DataPackageOperation.Move;
             if (e.DragUIOverride is DragUIOverride dragUiOverride)
             {
-                dragUiOverride.IsGlyphVisible = false;
-                dragUiOverride.Caption = I18N.Translate("DropTabHere");
+                e.DragUIOverride.IsGlyphVisible = false;
+                e.DragUIOverride.Caption = I18N.Translate("DropTabHere");
             }
         }
 
