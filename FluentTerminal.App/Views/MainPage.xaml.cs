@@ -15,7 +15,6 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.System;
 using Windows.UI.Xaml.Input;
 using FluentTerminal.App.Services.Utilities;
-using FluentTerminal.App.Views.SettingsPages;
 
 namespace FluentTerminal.App.Views
 {
@@ -53,7 +52,7 @@ namespace FluentTerminal.App.Views
         public MainPage()
         {
             InitializeComponent();
-            GeneralSettings.NotifyTrackedWindowCreated();
+            App.NotifyTrackedWindowCreated();
             Root.DataContext = this;
             Window.Current.SetTitleBar(TitleBar);
             Loaded += OnLoaded;
@@ -96,7 +95,7 @@ namespace FluentTerminal.App.Views
             if (_windowTracked)
             {
                 _windowTracked = false;
-                GeneralSettings.NotifyTrackedWindowClosed();
+                App.NotifyTrackedWindowClosed();
             }
 
             TopTabBar.TabDraggedOutside -= TabBar_TabDraggedOutside;
@@ -216,8 +215,8 @@ namespace FluentTerminal.App.Views
             e.AcceptedOperation = DataPackageOperation.Move;
             if (e.DragUIOverride is DragUIOverride dragUiOverride)
             {
-                e.DragUIOverride.IsGlyphVisible = false;
-                e.DragUIOverride.Caption = I18N.Translate("DropTabHere");
+                dragUiOverride.IsGlyphVisible = false;
+                dragUiOverride.Caption = I18N.Translate("DropTabHere");
             }
         }
 
