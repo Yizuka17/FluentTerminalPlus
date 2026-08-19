@@ -1,10 +1,51 @@
 ﻿using Microsoft.Toolkit.Uwp.Helpers;
+using Windows.Storage;
 using Windows.UI;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
 
 namespace FluentTerminal.App.Utilities
 {
+    public static class AppThemeManager
+    {
+        public const string AppThemeModeKey = "AppThemeMode";
+
+        // 0 = follow system, 1 = light, 2 = dark.
+        public static int GetModeIndex()
+        {
+            var values = ApplicationData.Current.LocalSettings.Values;
+            if (values.TryGetValue(AppThemeModeKey, out var value) && value is int mode && mode >= 0 && mode <= 2)
+            {
+                return mode;
+            }
+
+            return 0;
+        }
+
+        public static void SetModeIndex(int mode)
+        {
+            if (mode < 0 || mode > 2)
+            {
+                mode = 0;
+            }
+
+            ApplicationData.Current.LocalSettings.Values[AppThemeModeKey] = mode;
+        }
+
+        public static ElementTheme GetRequestedTheme()
+        {
+            switch (GetModeIndex())
+            {
+                case 1:
+                    return ElementTheme.Light;
+                case 2:
+                    return ElementTheme.Dark;
+                default:
+                    return ElementTheme.Default;
+            }
+        }
+    }
+
     public static class ContrastHelper
     {
         public static ElementTheme GetIdealThemeForBackgroundColor(string color)
@@ -24,8 +65,22 @@ namespace FluentTerminal.App.Utilities
             }
         }
 
+        public static ElementTheme ResolveTheme(ElementTheme theme)
+        {
+            if (theme != ElementTheme.Default)
+            {
+                return theme;
+            }
+
+            // ElementTheme.Default follows Windows. Resolve it only for APIs such as the
+            // native title-bar button colors that require an explicit light/dark choice.
+            var background = new UISettings().GetColorValue(UIColorType.Background);
+            return GetIdealThemeForBackgroundColor(background);
+        }
+
         public static void SetTitleBarButtonsForTheme(ElementTheme theme)
         {
+            theme = ResolveTheme(theme);
             var titleBar = ApplicationView.GetForCurrentView().TitleBar;
 
             titleBar.ButtonBackgroundColor = Colors.Transparent;
@@ -42,6 +97,7 @@ namespace FluentTerminal.App.Utilities
 
         public static Color? GetColor(string name, ElementTheme theme)
         {
+            theme = ResolveTheme(theme);
             if (theme == ElementTheme.Light)
             {
                 switch (name)
